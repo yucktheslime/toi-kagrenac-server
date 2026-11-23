@@ -114,3 +114,27 @@ function event_log(\PgSql\Connection $db, array $config, array $event): ?int
     }
     return $id;
 }
+
+// A Trade of Immersion: the newest log-only game events (kind game_event) of this session that
+// concern this NPC or no NPC, from the last 30 minutes, oldest first. Untrusted game text,
+// cleaned and capped; a failed query gives none rather than failing the turn.
+function recent_game_events(\PgSql\Connection $db, string $sessionId, string $npcId, int $limit): array
+{
+    if ($limit <= 0) {
+        return [];
+    }
+    $result = db_try($db,
+        "SELECT event_type, player_text, floor(extract(epoch FROM now() - created_at) / 60)::int AS minutes_ago
+         FROM ex_events WHERE session_id = $1 AND kind = 'game_event' AND status = 'complete'
+           AND (npc_id IS NULL OR npc_id = $2) AND created_at > now() - interval '30 minutes'
+         ORDER BY id DESC LIMIT $3", [$sessionId, $npcId, $limit]);
+    if ($result === null) {
+        return [];
+    }
+    $events = [];
+    while (($row = pg_fetch_assoc($result)) !== false) {
+        $events[] = ['type' => (string)$row['event_type'], 'text' => mb_substr(clean_line((string)$row['player_text']), 0, 300),
+            'minutes_ago' => (int)$row['minutes_ago']];
+    }
+    return array_reverse($events);
+}

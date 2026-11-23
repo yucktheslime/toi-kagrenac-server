@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db !== null) {
             [$errorField, $message] = ['bio-text', 'Biography must be 1-1000 characters.'];
         } elseif (bio_query($db,
             'INSERT INTO ex_npc_bios (npc_id, name, role, bio) VALUES ($1, $2, $3, $4)
-             ON CONFLICT (npc_id) DO UPDATE SET name = $2, role = $3, bio = $4, updated_at = now()',
+             ON CONFLICT (npc_id) DO UPDATE SET name = $2, role = $3, bio = $4, source = \'operator\', updated_at = now()',
             [$form['npc_id'], $form['name'], $form['role'], $form['bio']]) === false) {
             $message = 'Database error. Nothing was saved.';
         } else {

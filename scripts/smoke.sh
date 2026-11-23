@@ -68,7 +68,7 @@ expect "offered excludes" 200 '"actions":[],"rejected_actions":["follow_player"]
 expect "offered empty" 200 '"actions":[],"rejected_actions":["follow_player"]' "$(post turn.php "$(offer_json "o-$RUN-3" 'follow me' '[]')" "$TOKEN")"
 expect "offered bad name" 400 'offered_actions' "$(post turn.php "$(offer_json "o-$RUN-4" 'follow me' '["follow player"]')" "$TOKEN")"
 expect "offered not list" 400 'offered_actions' "$(post turn.php "$(offer_json "o-$RUN-5" 'follow me' '{"a":"follow_player"}')" "$TOKEN")"
-expect "offered too many" 400 'offered_actions' "$(post turn.php "$(offer_json "o-$RUN-6" 'follow me' '["a","b","c","d","e","f","g","h","i"]')" "$TOKEN")"
+expect "offered too many" 400 'offered_actions' "$(post turn.php "$(offer_json "o-$RUN-6" 'follow me' '["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q"]')" "$TOKEN")"
 # result_json <request_id> <status>: what the client says it did with follow_player.
 result_json() {
     printf '{"protocol":1,"request_id":"%s","session_id":"smoke-%s","npc_id":"npc_smoke","results":[{"name":"follow_player","status":"%s"}]}' "$1" "$RUN" "$2"

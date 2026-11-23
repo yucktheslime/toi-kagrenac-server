@@ -16,6 +16,8 @@ require_once __DIR__ . '/embeddings.php';
 require_once __DIR__ . '/memory.php';
 require_once __DIR__ . '/audit.php';
 
+const MAX_OFFERED_ACTIONS = 16;
+
 // The optional "context" object: at most 10 entries, keys a-z and _ (max 32), text values (max 200).
 function require_context(mixed $context): array
 {
@@ -33,7 +35,8 @@ function require_context(mixed $context): array
 }
 
 // The optional "offered_actions" list (protocol 1 addition): the action names the game can run
-// right now, at most 8. Missing means the game did not say (the allowlist alone applies); an
+// right now, at most MAX_OFFERED_ACTIONS (16 here: A Trade of Immersion offers more actions than the
+// template's 8; check "minecraft_actions" in health capabilities). Missing means the game did not say (the allowlist alone applies); an
 // empty list means it can run none. Anything else, including null, is refused rather than read as missing.
 function require_offered_actions(array $input): ?array
 {
@@ -41,8 +44,8 @@ function require_offered_actions(array $input): ?array
         return null;
     }
     $offered = $input['offered_actions'];
-    if (!is_array($offered) || !array_is_list($offered) || count($offered) > 8) {
-        fail(400, 'bad_request', 'offered_actions must be a list of at most 8 action names.');
+    if (!is_array($offered) || !array_is_list($offered) || count($offered) > MAX_OFFERED_ACTIONS) {
+        fail(400, 'bad_request', 'offered_actions must be a list of at most ' . MAX_OFFERED_ACTIONS . ' action names.');
     }
     foreach ($offered as $name) {
         if (!is_string($name) || !preg_match('/^[A-Za-z0-9_]{1,40}$/D', $name)) {
@@ -108,6 +111,7 @@ function run_turn(array $config, float $started, string $requestId, string $sess
         fail(500, 'internal_error', 'Internal server error.');
     }
     $llm = profile_llm(is_array($config['llm'] ?? null) ? $config['llm'] : [], $profile);
+    $llm['game_name'] = is_string($config['game_name'] ?? null) ? mb_substr($config['game_name'], 0, 40) : 'Minecraft';
     $event['provider'] = event_provider(['llm' => $llm]);
 
     // 4. Load the most recent history for this NPC, oldest first.
@@ -147,6 +151,10 @@ function run_turn(array $config, float $started, string $requestId, string $sess
         }
         $knowledge['memory'] = $memory;
     }
+    // A Trade of Immersion: the newest log-only game events of this session (deaths, damage,
+    // gifts, villager talk) so the NPC knows what just happened around it. Quoted data like the rest.
+    $knowledge['recent_events'] = recent_game_events($db, $sessionId, $npcId,
+        max(0, min(12, (int)($config['recent_events_limit'] ?? 6))));
     $facts = [];
     foreach ($knowledge['facts'] as $i => $fact) {
         $facts[] = ($trace['facts'][$i] ?? []) + $fact;
@@ -156,6 +164,7 @@ function run_turn(array $config, float $started, string $requestId, string $sess
         'bio' => $knowledge['bio'],
         'facts' => $facts,
         'history_lines' => count($history),
+        'recent_events' => count($knowledge['recent_events']),
         'embedding' => $embedding,
         'profile' => profile_trace($profile),
         'memory' => isset($knowledge['memory']) ? ['summary' => $knowledge['memory']['summary'] !== null,

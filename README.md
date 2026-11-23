@@ -1,3 +1,8 @@
+> **A Trade of Immersion:** this folder is the Minecraft mod's Kagrenac server, adapted from the
+> Kagrenac template. Start with [MINECRAFT.md](MINECRAFT.md); players follow
+> [docs/KAGRENAC_SETUP.md](../docs/KAGRENAC_SETUP.md). The rest of this README is the upstream
+> template's.
+
 # KAGRENAC AI Mod Maker
 
 <img src="ui/images/kagrenac.png" alt="KAGRENAC AI Mod Maker" width="128">

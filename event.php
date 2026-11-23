@@ -8,7 +8,10 @@
 require_once __DIR__ . '/lib/turn.php';
 
 // Fixed event types. Add a type here and in PROTOCOL.md together.
-const GAME_EVENT_TYPES = ['location_entered', 'item_given', 'combat_started', 'combat_ended'];
+// The first four are the template's; the rest are A Trade of Immersion (Minecraft) additions,
+// reported as "minecraft_events" in health capabilities.
+const GAME_EVENT_TYPES = ['location_entered', 'item_given', 'combat_started', 'combat_ended',
+    'entity_died', 'npc_hurt', 'player_hurt', 'villager_spoke', 'relationship', 'action_result', 'world_note'];
 const MAX_EVENT_TEXT = 300;
 
 $started = (float)($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true));

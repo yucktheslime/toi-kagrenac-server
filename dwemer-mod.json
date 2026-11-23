@@ -1,22 +1,31 @@
 {
   "schema_version": 1,
-  "id": "example-server",
-  "name": "KAGRENAC AI Mod Maker",
-  "description": "Installs KagrenacServer, the server component of KAGRENAC AI Mod Maker: a small PHP and PostgreSQL AI NPC server template for building your own AI mod.",
-  "project_url": "https://github.com/Dwemer-Dynamics/Kagrenac",
+  "id": "trade-of-immersion",
+  "name": "A Trade of Immersion Server",
+  "description": "Kagrenac-based AI NPC server for the A Trade of Immersion Minecraft mod (MCA Reborn companions and villagers): dialogue, allowlisted actions, game events, bios, memory and voice.",
+  "project_url": "https://github.com/yucktheslime/a-trade-of-immersion",
   "dashboard_path": "ui/",
   "health_path": "health.php",
-  "requirements": { "php": "8.2", "postgresql": true },
+  "requirements": {
+    "php": "8.2",
+    "postgresql": true
+  },
   "setup": {
     "config_template": "config/config.example.php",
     "config_path": "config/config.php",
     "token_placeholder": "CHANGE_ME_TOKEN",
-    "database_placeholder": "example_ai_mod",
+    "database_placeholder": "trade_of_immersion_ai",
     "migrate_script": "scripts/migrate.php"
   },
-  "branches": { "default": "main", "allowed": ["main", "dev"] },
+  "branches": {
+    "default": "main",
+    "allowed": [
+      "main"
+    ]
+  },
   "assets": {
     "icon": "ui/images/kagrenac.png",
     "banner": "ui/images/kagrenac.png"
-  }
+  },
+  "server_folder": "TradeOfImmersionServer"
 }

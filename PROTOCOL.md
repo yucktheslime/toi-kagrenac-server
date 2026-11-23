@@ -377,6 +377,66 @@ curl -s -H "Authorization: Bearer $TOKEN" --data \
   $BASE/turn.php
 ```
 
+## A Trade of Immersion extension (Minecraft)
+
+This copy of the server (`server_version` ending in `-toi`) adds the extension below for the
+Minecraft mod in the parent repository. Everything stays protocol 1 and backward compatible:
+a client that never uses it sees the template behaviour, and the mod falls back to the three
+template actions when `health.php` lacks these capabilities.
+
+| Capability | What it adds |
+|---|---|
+| `minecraft_actions` | 13 known actions (`lib/action_catalog.php`): `follow_player`, `hold_position`, `attack_hostile`, `attack_target`, `go_to`, `mount`, `dismount`, `equip`, `use_item`, `give_item`, `pick_up`, `inspect_item`, `talk_to_villager`. `offered_actions` may list up to 16 names. |
+| `action_args` | An action may carry one short argument, see below. |
+| `minecraft_events` | Extra `event.php` types, see below. |
+| `bio_sync` | `POST npc_bio.php`. |
+| `recent_events` | `turn.php` adds the session's recent log-only game events (`recent_events_limit`, default 6, max 12, last 30 minutes, this NPC or no NPC) to the prompt. |
+
+### Action arguments
+
+The model writes `[ACTION:name: argument]`, for example `[ACTION:equip: iron sword]`. The
+argument must match `^[\p{L}\p{N} _.,:'#~-]{1,80}$` and is returned as `args.value`:
+
+```json
+{"name": "equip", "args": {"target_id": "c-1234", "value": "iron sword"}}
+```
+
+Each action declares `none`, `optional` or `required`. A tag with a missing required argument,
+a forbidden argument or a bad character is rejected (`rejected_actions`), never repaired.
+`args` holds only `target_id` and, when present, `value`. At most 4 distinct actions per reply.
+The game treats `value` as a hint only: it resolves it against what it can actually see and
+reports `failed` with a reason (for example `no 'bread' to give`) through `result.php`.
+
+### Extra event types
+
+Besides `location_entered`, `item_given`, `combat_started` and `combat_ended`:
+`entity_died`, `npc_hurt`, `player_hurt`, `villager_spoke`, `relationship`, `action_result`,
+`world_note`. The same rules apply (text 1-300 characters, `respond` true or false). The game
+logs most of them with `respond: false`; `entity_died`, `villager_spoke` and `action_result`
+can also be sent with `respond: true` for an in-character reaction.
+
+### POST npc_bio.php
+
+Stores bios that the game generates, so they show on the dashboard's **NPC bios** page and
+reach the prompt like operator bios.
+
+```json
+{"protocol": 1, "npcs": [{"id": "v-9f3c...", "name": "Guillaume", "role": "villager", "bio": "Guillaume is an adult male villager..."}]}
+```
+
+- 1 to 16 entries; `id` follows the npc id rules; `name` and `role` up to 64, `bio` up to
+  1000 characters.
+- Rows are stored with `source = 'game'`. A bio the operator saved on the dashboard
+  (`source = 'operator'`) is never overwritten.
+- Response: `{"protocol":1,"ok":true,"stored":N,"unchanged":M}`.
+
+### speak.php voice_hint
+
+`speak.php` accepts an optional `voice_hint` (`^[a-z_]{1,16}$`, the game sends `female`,
+`male` or `neutral`). When the NPC has no profile voice, the server picks
+`voice_hints[hint][crc32(npc_id) % n]` from config, so each NPC keeps one voice. The response
+header `X-Voice-Source` is then `hint`.
+
 ## Changing the protocol
 
 Add optional fields freely. For anything a version-1 client would misread (renamed or removed

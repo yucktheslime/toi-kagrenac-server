@@ -27,7 +27,10 @@ final class SpeechService
 
     // The tts settings for one request. The NPC's profile may choose its voice; any problem
     // keeps the configured voice. $npcId only picks the voice, never who speaks.
-    public static function forNpc(array $config, array $tts, ?string $npcId): self
+    // A Trade of Immersion: without a profile voice, an optional $voiceHint (for example 'male' or
+    // 'female') picks a stable voice for this NPC from config voice_hints, so each NPC keeps
+    // sounding the same. The hint only chooses among voices the operator listed.
+    public static function forNpc(array $config, array $tts, ?string $npcId, ?string $voiceHint = null): self
     {
         if ($npcId !== null) {
             $db = db_connect_quiet($config);
@@ -36,6 +39,14 @@ final class SpeechService
                 app_log('profile voice lookup skipped; using the configured voice');
             } elseif (($profile['tts_voice'] ?? null) !== null) {
                 return new self(profile_tts($tts, $profile), 'profile');
+            }
+        }
+        $voices = $voiceHint !== null ? ($config['voice_hints'][$voiceHint] ?? null) : null;
+        if (is_array($voices)) {
+            $voices = array_values(array_filter($voices, fn($v) => is_string($v) && preg_match('/^[A-Za-z0-9_.:-]{1,64}$/D', $v)));
+            if ($voices) {
+                $tts['voice'] = $voices[crc32($npcId ?? '') % count($voices)];
+                return new self($tts, 'hint');
             }
         }
         return new self($tts, 'config');

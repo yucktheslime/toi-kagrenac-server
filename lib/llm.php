@@ -8,6 +8,8 @@
 require_once __DIR__ . '/action_catalog.php';
 
 const MAX_REPLY_CHARS = 1000;
+// The protocol allows at most 4 distinct actions per reply.
+const MAX_ACTIONS_PER_REPLY = 4;
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DWEMERLLM_CHAT_URL = 'http://127.0.0.1:1234/v1/chat/completions'; // DwemerDistro LLM Studio (LM Studio)
@@ -60,8 +62,36 @@ function mock_reply(array $llm, array $turn, array $knowledge, ?array $profile =
     sleep(max(0, min(10, (int)($llm['mock_delay_seconds'] ?? 0))));
 
     $text = strtolower($turn['text']);
-    if (str_contains($text, 'follow')) {
+    // Game events (action results, deaths) are not orders: never turn their words into actions.
+    $isEvent = str_starts_with($text, 'game event');
+    if (!$isEvent && str_contains($text, 'follow')) {
         return 'Of course. Lead the way. [ACTION:follow_player]';
+    }
+    // A Trade of Immersion: predictable tags for every Minecraft action, so the game's
+    // handlers can be tested without a model. "<verb> <rest>" gives [ACTION:name: rest].
+    $mockActions = [
+        '/\b(?:stay|wait here|hold position)\b/' => ['Alright, I will wait here.', 'hold_position', false],
+        '/\battack (?:the )?([a-z_ ]{2,40})/' => ['Leave it to me!', 'attack_target', true],
+        '/\b(?:attack|fight)\b/' => ['To arms!', 'attack_hostile', false],
+        '/\b(?:get off|dismount|get out)\b/' => ['Getting off.', 'dismount', false],
+        '/\b(?:get in|mount|ride)(?: the| a)? ?([a-z_ ]{0,40})/' => ['Hop in!', 'mount', true],
+        '/\bgo (?:to )?(home|owner|-?\d+ -?\d+ -?\d+|[a-z_ ]{2,40})/' => ['On my way.', 'go_to', true],
+        '/\b(?:equip|hold|wear) (?:the |your |a )?([a-z_ ]{2,40})/' => ['Like this?', 'equip', true],
+        '/\b(?:eat|use) (?:the |your |a |some )?([a-z_ ]{2,40})/' => ['Good idea.', 'use_item', true],
+        '/\bgive me (?:the |your |a |some )?([a-z_ ]{2,40})/' => ['Here, take it.', 'give_item', true],
+        '/\bpick (?:up )?(?:the )?([a-z_ ]{0,40})/' => ['I will grab that.', 'pick_up', true],
+        '/\b(?:inspect|look at) (?:the |your |this |my )?([a-z_ ]{2,40})/' => ['Let me take a look.', 'inspect_item', true],
+        '/\btalk to ([a-z_ ]{2,40})/' => ['Good day to you!', 'talk_to_villager', true],
+    ];
+    foreach ($isEvent ? [] : $mockActions as $pattern => [$say, $name, $withArg]) {
+        if (preg_match($pattern, $text, $m)) {
+            $arg = $withArg ? trim($m[1] ?? '') : '';
+            return $say . ($arg !== '' ? " [ACTION:$name: $arg]" : " [ACTION:$name]");
+        }
+    }
+    // Shows that recent game events (log-only event.php) reached the reply.
+    if (!empty($knowledge['recent_events']) && str_contains($text, 'what happened')) {
+        return 'Recently: ' . implode(' ', array_column($knowledge['recent_events'], 'text'));
     }
     if (str_contains($text, 'dance')) {
         // "dance" is not on the allowlist, so it shows up in rejected_actions.
@@ -93,7 +123,7 @@ function mock_reply(array $llm, array $turn, array $knowledge, ?array $profile =
 function knowledge_prompt(array $knowledge): string
 {
     if ($knowledge['bio'] === null && !$knowledge['facts'] && empty($knowledge['memory']['summary'])
-        && empty($knowledge['memory']['diary'])) {
+        && empty($knowledge['memory']['diary']) && empty($knowledge['recent_events'])) {
         return 'Reference data: none';
     }
     // JSON_HEX_TAG escapes < and >, so stored text cannot close the <data> block.
@@ -133,7 +163,8 @@ function actions_prompt(array $allowedActions): string
     // When to use each known action; only allowed ones are described.
     $hints = ActionCatalog::promptHints($tags);
     return 'You may ask the game for these actions by ending your reply with the tag: ' . implode(', ', $tags) . '.'
-        . $hints . ' Use at most one of them per reply. A tag is only a request that the game may refuse or fail: '
+        . $hints . ' Use at most ' . MAX_ACTIONS_PER_REPLY . ' different tags per reply, each at most once. '
+        . 'An argument after the colon is a short plain name, never a command. A tag is only a request that the game may refuse or fail: '
         . 'speak of it as something you will try or ask for, never promise it will happen and never say it is done '
         . 'or that you are moving. Use no other tags.';
 }
@@ -145,7 +176,9 @@ function openai_reply(array $llm, array $turn, array $history, array $knowledge,
     if ($profile !== null && trim((string)$profile['system_prompt']) !== '') {
         $character = "Character profile from the server operator:\n" . trim((string)$profile['system_prompt']) . "\n";
     }
-    $system = "You are {$turn['npc_name']}, a character in a video game, talking to {$turn['player_name']}.\n"
+    $game = trim((string)($llm['game_name'] ?? 'Minecraft'));
+    $system = "You are {$turn['npc_name']}, a character in the video game " . ($game !== '' ? $game : 'world')
+        . ", talking to {$turn['player_name']}.\n"
         . $character
         . "Stay in character and answer in one or two short sentences.\n"
         . context_prompt($turn['context']) . "\n"
@@ -200,15 +233,32 @@ define('NPC_TARGET_ACTIONS', ActionCatalog::requestNpcTargetNames());
 // The tag itself carries no arguments; allowed custom names are returned without args.
 function extract_actions(string $raw, array $allowedActions, ?string $targetId = null): array
 {
-    preg_match_all('/\[ACTION:\s*([A-Za-z0-9_]{1,40})\s*\]/', $raw, $matches);
+    // [ACTION:name] or [ACTION:name: argument] (A Trade of Immersion extension; see ActionCatalog).
+    preg_match_all('/\[ACTION:\s*([A-Za-z0-9_]{1,40})\s*(?::\s*([^\]]{0,200}))?\]/u', $raw, $matches, PREG_SET_ORDER);
     $actions = [];
     $rejected = [];
-    foreach (array_unique($matches[1]) as $name) {
-        if (in_array($name, $allowedActions, true)) {
-            $actions[] = ActionCatalog::request($name, $targetId);
-        } else {
-            $rejected[] = $name;
+    $seen = [];
+    foreach ($matches as $match) {
+        $name = $match[1];
+        if (isset($seen[$name])) {
+            continue; // the server never repeats a name
         }
+        $seen[$name] = true;
+        if (!in_array($name, $allowedActions, true) || count($actions) >= MAX_ACTIONS_PER_REPLY) {
+            $rejected[] = $name;
+            continue;
+        }
+        $rule = ActionCatalog::argRule($name);
+        $value = isset($match[2]) ? ActionCatalog::cleanArg($match[2]) : null;
+        if ($rule === ActionCatalog::ARG_REQUIRED && $value === null) {
+            $rejected[] = $name; // a required argument is missing or not plain text
+            continue;
+        }
+        if ($rule !== ActionCatalog::ARG_NONE && isset($match[2]) && trim($match[2]) !== '' && $value === null) {
+            $rejected[] = $name; // an optional argument that is not plain text
+            continue;
+        }
+        $actions[] = ActionCatalog::request($name, $targetId, $value);
     }
 
     // Remove every tag, including malformed ones, from the spoken text.

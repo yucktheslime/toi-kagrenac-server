@@ -11,13 +11,13 @@ permission.
 
 | Question | Answer |
 |---|---|
-| Game, version and modding tools | |
-| Starting feature (new companion or existing NPC, and what it does) | |
-| Mod name | |
-| Project id and name in `dwemer-mod.json` (own values, set before deploy) | |
-| Voice (none, or PocketTTS replies; speech input only if asked: Parakeet push-to-talk into the editable draft) | |
-| LLM provider (name only) | |
-| DwemerDistro (the one WSL distro name) | |
+| Game, version and modding tools | Minecraft Java 1.21.1, NeoForge 21.1 (primary) and Fabric, Architectury; MCA Reborn 7.7.36 |
+| Starting feature (new companion or existing NPC, and what it does) | Own AI companion entity plus MCA villagers: talk, act (13 actions), remember, react to events |
+| Mod name | A Trade of Immersion (`tradeofimmersion`) |
+| Project id and name in `dwemer-mod.json` (own values, set before deploy) | `trade-of-immersion`, A Trade of Immersion Server (manual install, folder `TradeOfImmersionServer`) |
+| Voice (none, or PocketTTS replies; speech input only if asked: Parakeet push-to-talk into the editable draft) | PocketTTS replies, positional, off by default; speech input on the roadmap |
+| LLM provider (name only) | OpenRouter (Gemma) |
+| DwemerDistro (the one WSL distro name) | the player's own (for example DwemerAI4Skyrim3) |
 | Dashboard card: description, author credit, icon and banner with their source and licence (from the conversation; none is fine) | |
 
 The card row is not a form: the agent writes a one-line description of what the mod does from
@@ -121,6 +121,8 @@ uncommitted code and interrupted checks remain explicit pending work.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-11-23 | Server lives in `kagrenac-server/` of the mod repository; installed by `scripts/deploy_toi.sh` (manual route) | one repository for mod and server; the launcher route needs `dwemer-mod.json` at the repository root |
+| 2026-11-23 | The game port is the Java mod itself (`../common`, `../neoforge`, `../fabric`), not `ports/` or the KagrenacClient | Minecraft mods are Java; the mod speaks protocol v1 directly over HTTP |
 
 ## Latest evidence
 
@@ -130,3 +132,5 @@ run. Kind is one of source, build, fixture, provider, user-reported or in-game; 
 
 | Date | Kind | What ran (command or in-game step) | Result |
 |---|---|---|---|
+| 2026-11-23 | fixture | `scripts/smoke.sh` and `scripts/smoke_minecraft.sh` on php -S + PostgreSQL 17, mock LLM | all pass except "config not served" (needs Apache) |
+| 2026-11-23 | in-game | NeoForge dev client against that server, mock LLM; see `ports/minecraft/README.md` | every action, events, bios, cancel, decision and voice playback exercised |

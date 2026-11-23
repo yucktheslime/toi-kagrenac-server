@@ -3,6 +3,12 @@
 KagrenacServer is Copyright (C) 2026 Dwemer Dynamics and is licensed under the GNU General
 Public License, version 3 only (`GPL-3.0-only`). The full text is in [LICENSE](LICENSE).
 
+**A Trade of Immersion copy.** This folder was copied from the Kagrenac template (upstream
+commit `978519f`, without `client/`) and modified for the Minecraft mod A Trade of Immersion
+in 2026. The changes are listed in [MINECRAFT.md](MINECRAFT.md). The copy and its changes remain
+under `GPL-3.0-only`. Because `client/` was not copied, the KagrenacClient notices mentioned
+below do not apply to this copy.
+
 The notices below stay with the files they cover. Keep them, unchanged, in any copy or
 project made from this template.
 

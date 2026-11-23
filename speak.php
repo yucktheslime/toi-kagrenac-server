@@ -18,6 +18,14 @@ $requestId = trace_start($input['request_id'] ?? null);
 $parentId = isset($input['parent_request_id']) ? require_id($input['parent_request_id'], 'parent_request_id', 8) : null;
 $npcId = isset($input['npc_id']) ? require_id($input['npc_id'], 'npc_id') : null;
 $text = require_text($input['text'] ?? null, 'text', 1000);
+// A Trade of Immersion addition: optional voice_hint (a-z and _, max 16), see lib/speech.php.
+$voiceHint = null;
+if (isset($input['voice_hint'])) {
+    if (!is_string($input['voice_hint']) || !preg_match('/^[a-z_]{1,16}$/D', $input['voice_hint'])) {
+        fail(400, 'bad_request', 'voice_hint must be 1-16 characters of a-z and _.');
+    }
+    $voiceHint = $input['voice_hint'];
+}
 
 $tts = $config['tts'] ?? [];
 $provider = SpeechService::provider($tts);
@@ -35,7 +43,7 @@ if (empty($tts['enabled'])) {
 }
 
 // The NPC's profile may choose its voice. Any problem keeps the configured voice.
-$speech = SpeechService::forNpc($config, $tts, $npcId);
+$speech = SpeechService::forNpc($config, $tts, $npcId, $voiceHint);
 [$wav, $detail] = $speech->synthesize($text);
 if ($wav === null) {
     $failed($detail);
