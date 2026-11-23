@@ -2,6 +2,24 @@
 // Shared dashboard setup. Nothing here starts a game turn or changes the database.
 require_once __DIR__ . '/../lib/app.php';
 
+// A Trade of Immersion: the dashboard has no login, so it only answers local requests. A request that came
+// through a tunnel or proxy (Cloudflare Tunnel, Tailscale Funnel, any reverse proxy) is refused, while the game
+// API next to it (turn.php, event.php, ...) stays usable there with its bearer token. Set
+// 'dashboard_allow_proxied' => true in config/config.php only if you put your own login in front of it.
+foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_CF_RAY', 'HTTP_TAILSCALE_FUNNEL_REQUEST', 'HTTP_X_FORWARDED_FOR', 'HTTP_FORWARDED', 'HTTP_X_REAL_IP'] as $proxyHeader) {
+    if (!empty($_SERVER[$proxyHeader])) {
+        $uiCfgPath = getenv('EXAMPLE_AI_CONFIG') ?: __DIR__ . '/../config/config.php';
+        $uiCfg = is_readable($uiCfgPath) ? (include $uiCfgPath) : [];
+        if (!is_array($uiCfg) || empty($uiCfg['dashboard_allow_proxied'])) {
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo "The dashboard is only available on the PC that runs it (http://127.0.0.1:19000/...).\n";
+            exit;
+        }
+        break;
+    }
+}
+
 $uiBase = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/ui/index.php'), '/');
 if (basename($uiBase) === 'examples') {
     $uiBase = dirname($uiBase);
