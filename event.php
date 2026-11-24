@@ -73,4 +73,11 @@ event_prune($db, $config);
 forget_old_request_ids($db);
 
 // "logged" means the server stored the event. It is not a sign that anything ran in the game.
-send_json(200, ['ok' => true, 'request_id' => $requestId, 'respond' => false, 'logged' => true]);
+// Optional TXT2VEC (or other embeddings) indexing runs after the game has the reply.
+send_json_then(200, ['ok' => true, 'request_id' => $requestId, 'respond' => false, 'logged' => true],
+    function () use ($db, $config, $eventId, $type, $text): void {
+        $settings = embedding_active_settings($config);
+        if ($settings !== null) {
+            memory_vector_index_row($db, $settings, 'ex_events', $eventId, trim("$type: $text"));
+        }
+    });

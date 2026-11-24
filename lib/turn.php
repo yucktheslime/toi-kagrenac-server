@@ -13,6 +13,9 @@ require_once __DIR__ . '/knowledge.php';
 require_once __DIR__ . '/events.php';
 require_once __DIR__ . '/profiles.php';
 require_once __DIR__ . '/embeddings.php';
+require_once __DIR__ . '/txt2vec.php';
+require_once __DIR__ . '/minime.php';
+require_once __DIR__ . '/memory_vectors.php';
 require_once __DIR__ . '/memory.php';
 require_once __DIR__ . '/audit.php';
 
@@ -117,16 +120,38 @@ function run_turn(array $config, float $started, string $requestId, string $sess
     // 4. Load the most recent history for this NPC, oldest first.
     $history = $dialogue->recent($sessionId, $npcId, $historyLimit);
 
-    // 5. Optional vector search: one embedding call for the player's line, outside any
-    //    transaction and never retried. Any failure falls back to the keyword search alone.
+    // 5. Optional MiniMe classification and vector search, outside any transaction and never
+    //    retried. MiniMe (CHIM's /extract and optional /command) may say a memory lookup is not
+    //    needed, or hint an action; any failure leaves the current behaviour in place. Vector
+    //    search (TXT2VEC, OpenAI or mock) finds facts, and also diary notes and game events
+    //    when a memory lookup is allowed. Keyword / newest-first search is always the fallback.
     $vectorHits = [];
+    $vector = null;
     $embedding = 'off';
-    $embeddingSettings = embedding_settings($config);
+    $minimeResult = ['recall' => null, 'tags' => '', 'command' => null, 'action' => null, 'error' => null];
+    $minime = minime_settings($config);
+    if ($minime !== null) {
+        $callStarted = microtime(true);
+        $minimeResult = minime_classify($minime, $turn['text'], is_array($allowedActions) ? $allowedActions : []);
+        audit_insert($db, $config, ['kind' => 'minime', 'provider' => 'minime',
+            'status' => $minimeResult['error'] === null ? 'ok' : 'fallback', 'error_code' => $minimeResult['error'],
+            'duration_ms' => event_duration_ms($callStarted), 'request_id' => audit_child_id('mm'),
+            'parent_request_id' => $requestId, 'session_id' => $sessionId, 'npc_id' => $npcId,
+            'detail' => $minimeResult['error'] === null
+                ? ('recall=' . ($minimeResult['recall'] === null ? 'unknown' : ($minimeResult['recall'] ? 'yes' : 'no'))
+                    . ($minimeResult['action'] !== null ? ', action ' . $minimeResult['action'] : ''))
+                : 'minime missed; model used as fallback']);
+    }
+    $embeddingSettings = embedding_active_settings($config);
+    $queryText = $turn['text'];
+    if ($minimeResult['tags'] !== '') {
+        $queryText = trim($queryText . ' ' . $minimeResult['tags']);
+    }
     if ($embeddingSettings !== null) {
         $callStarted = microtime(true);
         $code = null;
         try {
-            [$vector] = embed_texts($embeddingSettings, [$turn['text']]);
+            [$vector] = embed_texts($embeddingSettings, [$queryText]);
             $vectorHits = embedding_search($db, $npcId, $vector, embedding_model_id($embeddingSettings), MAX_FACTS);
             $embedding = 'ok';
         } catch (EmbeddingError $error) {
@@ -149,12 +174,47 @@ function run_turn(array $config, float $started, string $requestId, string $sess
             $logged('failed', ['error_code' => 'internal_error']);
             fail(500, 'internal_error', 'Internal server error.');
         }
+        // When TXT2VEC (or another embeddings provider) is up and Minime did not decline a
+        // recall, replace the newest diary entries with the closest matches. The current
+        // summary is always kept. A miss or a "No" from Minime leaves the newest entries.
+        if ($memory !== null && $embedding === 'ok' && $vector !== null && $minimeResult['recall'] !== false
+            && $embeddingSettings !== null) {
+            $diaryHits = memory_vector_search_notes($db, $sessionId, $npcId, $vector,
+                embedding_model_id($embeddingSettings), MEMORY_DIARY_IN_PROMPT);
+            if ($diaryHits) {
+                $memory['diary'] = array_values(array_filter(array_map(
+                    fn($hit) => memory_clean($hit['text'], MEMORY_MAX_DIARY), $diaryHits)));
+            }
+        }
         $knowledge['memory'] = $memory;
     }
     // A Trade of Immersion: the newest log-only game events of this session (deaths, damage,
     // gifts, villager talk) so the NPC knows what just happened around it. Quoted data like the rest.
-    $knowledge['recent_events'] = recent_game_events($db, $sessionId, $npcId,
-        max(0, min(12, (int)($config['recent_events_limit'] ?? 6))));
+    // With a query vector and a memory lookup allowed, relevant older events can replace the
+    // newest-only list; recent events fill any remaining places.
+    $recentLimit = max(0, min(12, (int)($config['recent_events_limit'] ?? 6)));
+    $knowledge['recent_events'] = recent_game_events($db, $sessionId, $npcId, $recentLimit);
+    if ($embedding === 'ok' && $vector !== null && $minimeResult['recall'] !== false
+        && $embeddingSettings !== null && $recentLimit > 0) {
+        $semanticEvents = memory_vector_search_events($db, $sessionId, $npcId, $vector,
+            embedding_model_id($embeddingSettings), $recentLimit);
+        if ($semanticEvents) {
+            $seen = array_column($semanticEvents, 'text');
+            foreach ($knowledge['recent_events'] as $event) {
+                if (count($semanticEvents) >= $recentLimit) {
+                    break;
+                }
+                if (!in_array($event['text'], $seen, true)) {
+                    $semanticEvents[] = $event;
+                    $seen[] = $event['text'];
+                }
+            }
+            $knowledge['recent_events'] = array_slice($semanticEvents, 0, $recentLimit);
+        }
+    }
+    if ($minimeResult['action'] !== null) {
+        $knowledge['action_hint'] = $minimeResult['action'];
+    }
     $facts = [];
     foreach ($knowledge['facts'] as $i => $fact) {
         $facts[] = ($trace['facts'][$i] ?? []) + $fact;
@@ -169,6 +229,8 @@ function run_turn(array $config, float $started, string $requestId, string $sess
         'profile' => profile_trace($profile),
         'memory' => isset($knowledge['memory']) ? ['summary' => $knowledge['memory']['summary'] !== null,
             'diary_entries' => count($knowledge['memory']['diary'])] : null,
+        'minime' => $minime === null ? null : ['recall' => $minimeResult['recall'],
+            'action' => $minimeResult['action'], 'error' => $minimeResult['error']],
     ];
 
     // 7. Ask the model. This can be slow, so it happens outside any transaction.

@@ -12,7 +12,7 @@ const BASELINE_ID = 'baseline-1';
 // Every migration this code needs, in order: exactly the sql/*.sql file names. To add one, add the
 // new sql/NNN_name.sql file and append its name here; the newest is always the last entry.
 const SCHEMA_MIGRATIONS = ['001_init', '002_npc_knowledge', '003_event_log', '004_game_events', '005_profiles',
-    '006_memory', '007_connector_calls', '008_game_bios'];
+    '006_memory', '007_connector_calls', '008_game_bios', '009_memory_vectors'];
 define('SCHEMA_VERSION', SCHEMA_MIGRATIONS[count(SCHEMA_MIGRATIONS) - 1]);
 // What to run when migrations are missing. The installer needs root and applies them.
 const MIGRATE_HINT = 'Run "sudo bash scripts/install.sh" inside WSL from the server folder.';
@@ -22,7 +22,8 @@ const SERVER_CAPABILITIES = ['turn', 'cancel', 'result', 'game_event', 'action_t
     'profiles', 'memory', 'trace',
     // A Trade of Immersion additions (ports/minecraft/README.md): up to 16 offered actions with
     // one-argument tags, the extra event types, game-pushed bios (npc_bio.php), recent events in turns.
-    'minecraft_actions', 'action_args', 'minecraft_events', 'bio_sync', 'recent_events'];
+    'minecraft_actions', 'action_args', 'minecraft_events', 'bio_sync', 'recent_events',
+    'minime', 'txt2vec'];
 
 // The request id of this HTTP request, once known: the caller's validated request_id or one
 // made by trace_start(). It is added to JSON replies, the X-Request-Id header and error log lines.
@@ -395,6 +396,34 @@ function http_post(string $url, array $headers, string|array $body, int $timeout
     curl_close($curl);
     if ($ok === false) {
         throw new RuntimeException('POST to ' . (parse_url($url, PHP_URL_HOST) ?: 'an invalid URL') . " failed: $error");
+    }
+    return [$status, $received];
+}
+
+// Small curl GET with timeouts, a response size cap and no redirects. Throws on transport
+// errors; the message names only the host, never the URL's path, query or any header.
+function http_get(string $url, array $headers, int $timeoutSeconds, int $maxBytes): array
+{
+    $received = '';
+    $curl = curl_init($url);
+    curl_setopt_array($curl, [
+        CURLOPT_HTTPGET => true,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => max(1, min($timeoutSeconds, 120)),
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$received, $maxBytes): int {
+            $received .= $chunk;
+            return strlen($received) > $maxBytes ? 0 : strlen($chunk);
+        },
+    ]);
+    $ok = curl_exec($curl);
+    $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($curl);
+    curl_close($curl);
+    if ($ok === false) {
+        throw new RuntimeException('GET to ' . (parse_url($url, PHP_URL_HOST) ?: 'an invalid URL') . " failed: $error");
     }
     return [$status, $received];
 }

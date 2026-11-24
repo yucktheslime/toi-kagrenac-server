@@ -143,7 +143,7 @@ require __DIR__ . '/tmpl/header.php';
             <div class="setting-row"><span>API key</span><span><span class="chim-tag<?= $keySaved ? ' chim-badge-success' : '' ?>"><?= $keySaved ? 'Saved' : 'Not set' ?></span> <a href="api_keys.php">Change on API keys</a></span></div>
             <div class="preview-actions"><button type="submit">Save vector search</button><span>Saving never contacts the provider.</span></div>
         </form>
-        <p class="help">Mock vectors are hashed words: deterministic and free, but not semantic (they only match shared words). A turn sends the player's line for one embedding, compares it with at most <?= EMBEDDING_SCAN_LIMIT ?> stored vectors of this NPC's and global facts (newest first) and keeps matches scoring at least <?= EMBEDDING_MIN_SCORE ?>. Keyword search fills the remaining places and is used alone if the call fails.</p>
+        <p class="help">For DwemerDistro TXT2VEC (port 8082), prefer <a href="minime.php">Minime &amp; TXT2VEC</a>, which also embeds diary notes and game events. Mock vectors are hashed words: deterministic and free, but not semantic (they only match shared words). A turn sends the player's line for one embedding, compares it with at most <?= EMBEDDING_SCAN_LIMIT ?> stored vectors of this NPC's and global facts (newest first) and keeps matches scoring at least <?= EMBEDDING_MIN_SCORE ?>. Keyword search fills the remaining places and is used alone if the call fails.</p>
         <h3>Reindex</h3>
         <?php if ($stats === null): ?>
         <p><?= $form['emb_enabled'] ? 'Vector counts are unavailable (database not ready).' : 'Vector search is off.' ?></p>

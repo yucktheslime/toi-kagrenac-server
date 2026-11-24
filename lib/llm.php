@@ -122,6 +122,7 @@ function mock_reply(array $llm, array $turn, array $knowledge, ?array $profile =
 // Memory notes may be model-generated, so they are data like everything else here.
 function knowledge_prompt(array $knowledge): string
 {
+    unset($knowledge['action_hint']);
     if ($knowledge['bio'] === null && !$knowledge['facts'] && empty($knowledge['memory']['summary'])
         && empty($knowledge['memory']['diary']) && empty($knowledge['recent_events'])) {
         return 'Reference data: none';
@@ -184,6 +185,11 @@ function openai_reply(array $llm, array $turn, array $history, array $knowledge,
         . context_prompt($turn['context']) . "\n"
         . knowledge_prompt($knowledge) . "\n"
         . actions_prompt($allowedActions);
+    $hint = $knowledge['action_hint'] ?? null;
+    if (is_string($hint) && preg_match('/^[A-Za-z0-9_]{1,40}$/D', $hint) && in_array($hint, $allowedActions, true)) {
+        $system .= "\nA local text classifier suggests the player may want the action $hint. "
+            . 'That is only a hint: you still decide, and you may ignore it.';
+    }
 
     $messages = [['role' => 'system', 'content' => $system]];
     foreach ($history as $row) {

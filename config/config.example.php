@@ -140,6 +140,30 @@ return [
         'timeout_seconds' => 5,
     ],
 
+    // OPTIONAL MINIME-T5 (Configuration > Minime & TXT2VEC). Off by default. DwemerDistro's
+    // MiniMe service on port 8082 classifies a line the way CHIM does: GET /extract?text=...
+    // (is this a memory-recall question, plus keywords) and optionally GET /command?text=...
+    // (an action hint). The language model is the fallback when Minime is off or misses.
+    // auto_detect is reserved for the dashboard probe; a failed call never blocks a turn.
+    'minime' => [
+        'enabled' => false,
+        'auto_detect' => true,
+        'url' => 'http://127.0.0.1:8082',
+        'timeout_seconds' => 2,
+    ],
+
+    // OPTIONAL TXT2VEC (Configuration > Minime & TXT2VEC). Off by default. DwemerDistro's
+    // embedding service shares port 8082: POST /embed with {"text":"..."} returns {embedding}.
+    // Used to store and retrieve relevant memory notes and game events, and as the
+    // 'txt2vec' fact-embeddings provider. If this is on, it is used instead of embeddings.* .
+    'txt2vec' => [
+        'enabled' => false,
+        'auto_detect' => true,
+        'url' => 'http://127.0.0.1:8082',
+        'timeout_seconds' => 5,
+        'dims' => 0,
+    ],
+
     // Optional private folder for dashboard backups (Control Panel > Backups): an absolute
     // path outside the web root, owned by the web server user with mode 0700. Empty uses an
     // app-scoped folder in the system temp directory, which may be emptied on restart.

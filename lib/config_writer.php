@@ -9,7 +9,7 @@
 // Anything that cannot be done exactly that way fails with a clear message and writes nothing.
 
 // Only these top-level keys may change. token, database and unknown keys never change.
-const CONFIG_EDITABLE_KEYS = ['history_limit', 'allowed_actions', 'llm', 'tts', 'stt', 'decision', 'memory', 'embeddings'];
+const CONFIG_EDITABLE_KEYS = ['history_limit', 'allowed_actions', 'llm', 'tts', 'stt', 'decision', 'memory', 'embeddings', 'minime', 'txt2vec'];
 const CONFIG_MAX_BYTES = 262144;
 
 final class ConfigWriteError extends RuntimeException

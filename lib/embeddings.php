@@ -5,6 +5,7 @@
 //
 // - provider 'openai': any OpenAI-compatible POST /v1/embeddings at the configured URL, with
 //   the key from the API keys page. No redirects, a time limit, a size cap and no retry.
+// - provider 'txt2vec': DwemerDistro TXT2VEC, POST {base}/embed with {"text"} (port 8082).
 // - provider 'mock': deterministic hashed word counts. It needs no service and is NOT
 //   semantic: it only finds facts that share words, which is enough to test the pipeline.
 // - Every vector is checked (a list of 1-4096 finite numbers, the configured size, non-zero
@@ -17,7 +18,8 @@ require_once __DIR__ . '/app.php';
 require_once __DIR__ . '/events.php';
 require_once __DIR__ . '/knowledge.php';
 
-const EMBEDDING_PROVIDERS = ['mock' => 'Mock (hashed words, not semantic; no service)', 'openai' => 'OpenAI-compatible /v1/embeddings'];
+const EMBEDDING_PROVIDERS = ['mock' => 'Mock (hashed words, not semantic; no service)', 'openai' => 'OpenAI-compatible /v1/embeddings',
+    'txt2vec' => 'DwemerDistro TXT2VEC (POST /embed on port 8082)'];
 const EMBEDDING_DEFAULT_URL = 'https://api.openai.com/v1/embeddings';
 const EMBEDDING_DEFAULT_MODEL = 'text-embedding-3-small';
 const EMBEDDING_MOCK_DIMS = 64;
@@ -46,10 +48,18 @@ function embedding_settings(array $config): ?array
 // The key is excluded: rotating a credential does not change the embedding space.
 function embedding_model_id(array $settings): string
 {
-    return ($settings['provider'] ?? 'mock') === 'mock' ? 'mock:hash-' . EMBEDDING_MOCK_DIMS
-        : 'openai:' . hash('sha256', json_encode([
-            (string)($settings['url'] ?? ''), (string)($settings['model'] ?? ''), (int)($settings['dims'] ?? 0),
+    $provider = $settings['provider'] ?? 'mock';
+    if ($provider === 'mock') {
+        return 'mock:hash-' . EMBEDDING_MOCK_DIMS;
+    }
+    if ($provider === 'txt2vec') {
+        return 'txt2vec:' . hash('sha256', json_encode([
+            (string)($settings['url'] ?? ''), (int)($settings['dims'] ?? 0),
         ], JSON_UNESCAPED_SLASHES));
+    }
+    return 'openai:' . hash('sha256', json_encode([
+        (string)($settings['url'] ?? ''), (string)($settings['model'] ?? ''), (int)($settings['dims'] ?? 0),
+    ], JSON_UNESCAPED_SLASHES));
 }
 
 // A unit-length copy of $vector, or null unless it is a list of 1-4096 finite numbers (exactly
@@ -98,6 +108,10 @@ function embed_texts(array $settings, array $texts): array
     $provider = $settings['provider'] ?? 'mock';
     if ($provider === 'mock') {
         return array_map(fn($text) => embedding_mock($text) ?? throw new EmbeddingError('no_words'), $texts);
+    }
+    if ($provider === 'txt2vec') {
+        require_once __DIR__ . '/txt2vec.php';
+        return array_map(fn($text) => txt2vec_embed($settings, $text), $texts);
     }
     if ($provider !== 'openai') {
         throw new EmbeddingError('unknown_provider');
@@ -157,6 +171,28 @@ function embed_texts(array $settings, array $texts): array
 // A stored vector that does not decode to the query's size is skipped.
 function embedding_search(\PgSql\Connection $db, string $npcId, array $query, string $modelId, int $limit): array
 {
+    // Prefer pgvector cosine distance when migration 009 added the column.
+    $pgvector = @pg_query($db, "SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'ex_knowledge' AND column_name = 'embedding_vector'");
+    if ($pgvector !== false && pg_num_rows($pgvector) === 1) {
+        $literal = '[' . implode(',', $query) . ']';
+        $result = db_query($db,
+            "SELECT id, topic, fact, npc_id IS NULL AS global, 1 - (embedding_vector <=> $3::vector) AS score
+             FROM ex_knowledge
+             WHERE (npc_id = $1 OR npc_id IS NULL) AND embedding_model = $2 AND embedding_vector IS NOT NULL
+             ORDER BY embedding_vector <=> $3::vector, id DESC
+             LIMIT $4",
+            [$npcId, $modelId, $literal, EMBEDDING_SCAN_LIMIT]);
+        $hits = [];
+        foreach (pg_fetch_all($result) as $row) {
+            $score = is_numeric($row['score']) ? (float)$row['score'] : 0.0;
+            if ($score >= EMBEDDING_MIN_SCORE) {
+                $hits[] = ['id' => (int)$row['id'], 'topic' => $row['topic'], 'fact' => $row['fact'],
+                    'global' => $row['global'] === 't', 'score' => round($score, 3)];
+            }
+        }
+        return array_slice($hits, 0, $limit);
+    }
     $result = db_query($db,
         'SELECT id, topic, fact, npc_id IS NULL AS global, embedding::text AS embedding FROM ex_knowledge
          WHERE (npc_id = $1 OR npc_id IS NULL) AND embedding_model = $2 AND embedding IS NOT NULL

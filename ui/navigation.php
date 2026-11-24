@@ -22,6 +22,7 @@ return [
             'voice' => ['Voice', 'voice.php'],
             'decision' => ['NPC selection', 'decision_settings.php'],
             'memory_settings' => ['Memory settings', 'memory_settings.php'],
+            'minime' => ['Minime & TXT2VEC', 'minime.php'],
         ],
         'World & Behavior' => [
             'npc_bios' => ['NPC bios', 'npc_bios.php'],

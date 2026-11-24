@@ -17,6 +17,23 @@ require_once __DIR__ . '/llm.php';
 require_once __DIR__ . '/dialogue_history.php';
 require_once __DIR__ . '/events.php';
 require_once __DIR__ . '/audit.php';
+require_once __DIR__ . '/txt2vec.php';
+require_once __DIR__ . '/memory_vectors.php';
+
+// The current summary and the newest few diary rows, for post-save embedding. Empty on error.
+function memory_history_notes(\PgSql\Connection $db, string $sessionId, string $npcId): array
+{
+    $result = db_try($db,
+        "SELECT id, kind, text FROM (
+            (SELECT id, kind, text FROM ex_memory_notes WHERE session_id = $1 AND npc_id = $2 AND kind = 'summary')
+            UNION ALL
+            (SELECT id, kind, text FROM ex_memory_notes WHERE session_id = $1 AND npc_id = $2 AND kind = 'diary'
+             ORDER BY id DESC LIMIT 3)
+         ) notes ORDER BY id",
+        [$sessionId, $npcId]);
+    return $result === null ? [] : (pg_fetch_all($result) ?: []);
+}
+
 
 const MEMORY_MAX_SUMMARY = 1000;
 const MEMORY_MAX_DIARY = 300;
@@ -326,6 +343,14 @@ function memory_after_turn(\PgSql\Connection $db, array $config, array $llm, arr
             [$status, $code, $source] = memory_refresh_notes($db, $llm, $turn['session_id'], $turn['npc_id'], $turn['npc_name'],
                 $turn['generation'], $turn['history_limit'], $turn['request_id']);
             $audit('memory', $started, $status, $code, 'summary and diary' . ($source !== null ? " ($source)" : ''));
+            $emb = $status === 'ok' ? embedding_active_settings($config) : null;
+            if ($emb !== null) {
+                $rows = memory_history_notes($db, $turn['session_id'], $turn['npc_id']);
+                foreach ($rows as $row) {
+                    memory_vector_index_row($db, $emb, 'ex_memory_notes', (int)$row['id'],
+                        memory_vector_index_text($row));
+                }
+            }
         }
     }
     if ($settings['auto_extract']) {

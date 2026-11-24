@@ -12,7 +12,7 @@
 require_once __DIR__ . '/app.php';
 require_once __DIR__ . '/events.php';
 
-const AUDIT_KINDS = ['tts', 'stt', 'decision', 'embedding', 'memory', 'extraction'];
+const AUDIT_KINDS = ['tts', 'stt', 'decision', 'embedding', 'memory', 'extraction', 'minime'];
 const AUDIT_STATUSES = ['ok', 'failed', 'disabled', 'fallback', 'stale'];
 
 // An id for a call made on behalf of another request (its parent), e.g. "emb-..." under a turn.
