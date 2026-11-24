@@ -2,4 +2,4 @@
 // The server's own release version. Change only this line when you release your server.
 // This file only defines a constant, so requesting it over HTTP prints nothing.
 
-const SERVER_VERSION = '0.3.1-toi';
+const SERVER_VERSION = '0.3.2-toi';

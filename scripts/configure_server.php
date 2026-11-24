@@ -17,8 +17,8 @@
 //   another install's private config, and only its llm.api_key is taken, after checking that its
 //   llm.mode is openrouter. Its output and errors are discarded; its token, database and every
 //   other setting are never copied. dwemerllm and mock leave llm.api_key as it is (neither sends it).
-// - --tts pockettts enables DwemerDistro PocketTTS at its default local address with the voice
-//   given; --tts off only turns voice off. --allowed-actions replaces the server allowlist with
+// - --tts pockettts enables DwemerDistro PocketTTS (provider auto, http://127.0.0.1:8024) with the
+//   voice given; --tts off only turns voice off. --allowed-actions replaces the server allowlist with
 //   known action names (or 'none' for an empty list); the caller checks nonempty lists against the game side first.
 // - --test-providers makes one turn.php call (offered_actions [], its own test session) and one
 //   speak.php call with that reply, no retry. It refuses before any call when vector search or
@@ -42,7 +42,8 @@ require __DIR__ . '/../lib/embeddings.php';
 require __DIR__ . '/../lib/memory.php';
 
 const CONFIGURE_LLM_MODES = ['openrouter', 'dwemerllm', 'mock'];
-const POCKETTTS_LOCAL = ['provider' => 'pockettts', 'url' => 'http://127.0.0.1:8086/v1/audio/speech', 'model' => 'pocket-tts'];
+// DwemerDistro PocketTTS: 'auto' finds it on port 8024 (XTTS-style API) or the older 8086 route.
+const POCKETTTS_LOCAL = ['provider' => 'auto', 'url' => 'http://127.0.0.1:8024', 'model' => 'pocket-tts'];
 const TEST_TEXT = 'Hello, can you hear me?';
 
 function say(string $status, string $text): void

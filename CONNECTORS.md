@@ -51,6 +51,12 @@ speech-to-text (STT), the recommended DwemerDistro starting choices; the `openai
 `fasterwhisper` STT blocks are supported alternatives. Only these providers are wired in:
 
 ```php
+// DwemerDistro PocketTTS (launcher, port 8024). 'auto' also finds XTTS on 8020 and the
+// older audio.cpp PocketTTS on 8086. Requests: POST <url>/tts_to_audio
+// {"text", "speaker_wav": voice, "language"} -> WAV, speakers from GET <url>/speakers_list.
+'tts' => ['enabled' => true, 'provider' => 'auto', 'url' => 'http://127.0.0.1:8024',
+          'voice' => 'alba', 'language' => 'en', 'timeout_seconds' => 30],
+// Only the older audio.cpp route (OpenAI-style, model + input + voice):
 'tts' => ['enabled' => true, 'provider' => 'pockettts',
           'url' => 'http://127.0.0.1:8086/v1/audio/speech', 'model' => 'pocket-tts', 'voice' => 'alba',
           'timeout_seconds' => 30],

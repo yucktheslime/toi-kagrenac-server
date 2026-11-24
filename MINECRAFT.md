@@ -17,7 +17,7 @@ for Windows and CurseForge.
 | Action arguments | `[ACTION:name: argument]` becomes `args.value` ([PROTOCOL.md](PROTOCOL.md#a-trade-of-immersion-extension-minecraft)). |
 | Events | Extra event.php types: `entity_died`, `npc_hurt`, `player_hurt`, `villager_spoke`, `relationship`, `action_result`, `world_note`. Recent log-only events go into the prompt. |
 | Bios | `npc_bio.php` stores game-generated bios (companions and MCA villagers: personality, profession, family). Migration `008_game_bios` adds `ex_npc_bios.source`. The game never overwrites a bio saved on the dashboard. |
-| Voice | `speak.php` `voice_hint` with per-gender voice lists (`voice_hints` in config). |
+| Voice | `speak.php` `voice_hint` with per-gender voice lists (`voice_hints` in config), picked among the TTS service's real speakers. DwemerDistro PocketTTS on port 8024 (XTTS-style `/tts_to_audio`, as CHIM calls it) is found automatically (`tts.provider` `auto`). |
 | Defaults | Database `trade_of_immersion_ai`. LLM `openrouter` / `google/gemma-4-31b-it`, with the key set on the dashboard. NPC selection on. Memory on. `game_name` `Minecraft`. |
 | Mock | The mock LLM knows a keyword for each action (for tests without a key). It never turns a game event's text into actions (it echoes the event instead). |
 | Install | `scripts/deploy_toi.sh` installs from a clone of the mod repository (see below). |

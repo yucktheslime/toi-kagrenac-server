@@ -60,12 +60,19 @@ return [
     // DwemerDistro service from the launcher, then set 'enabled' => true (or use the Voice page).
     'tts' => [
         'enabled' => false,
-        // 'pockettts' DwemerDistro PocketTTS (audio.cpp). 'openai' any OpenAI-compatible
+        // 'auto' finds DwemerDistro PocketTTS at 'url' (port 8024, the XTTS-style API CHIM uses)
+        // and, if nothing answers there, on ports 8020 and 8086 of the same host.
+        // 'xtts' only that XTTS-style API (PocketTTS 8024, XTTS 8020). 'pockettts' the older
+        // audio.cpp route (http://127.0.0.1:8086/v1/audio/speech). 'openai' any OpenAI-compatible
         // /v1/audio/speech endpoint that can return WAV (model is then required).
-        'provider' => 'pockettts',
-        'url' => 'http://127.0.0.1:8086/v1/audio/speech',
-        'model' => 'pocket-tts',
+        'provider' => 'auto',
+        'url' => 'http://127.0.0.1:8024',
+        'model' => 'pocket-tts',    // audio.cpp and openai only.
+        // A speaker the TTS service lists (Voice page). One it does not have falls back to its first.
         'voice' => 'alba',
+        // Language code sent with each line (en, de, fr, es, it, pt, ...). '' sends none, so
+        // PocketTTS keeps the language it has loaded. Changing it makes PocketTTS load that model.
+        'language' => 'en',
         'api_key' => '',            // Optional, openai provider only.
         'timeout_seconds' => 30,
     ],
@@ -81,8 +88,10 @@ return [
     ],
 
     // A Trade of Immersion: when an NPC has no profile voice, the game's voice_hint (its gender)
-    // picks one of these voices, the same one every time for that NPC. Names are PocketTTS voices;
-    // change them to voices your TTS service has. An empty list uses tts.voice for everyone.
+    // picks one of these voices, the same one every time for that NPC. Only voices the TTS service
+    // lists are used; when none of them is there, female and male pick among its speakers whose
+    // names say so (CHIM names such as femalenord, malebrute), neutral among all of them, and
+    // otherwise tts.voice is used. The Voice page shows what each hint picks from.
     'voice_hints' => [
         'female' => ['alba', 'fantine', 'cosette', 'eponine', 'azelma'],
         'male' => ['marius', 'javert', 'jean'],

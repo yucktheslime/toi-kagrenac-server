@@ -98,3 +98,4 @@ body button.sample-choice.selected { border-color: var(--chim-accent) !important
 .confirm-panel { border-left: 3px solid var(--chim-danger); }
 fieldset label { display: flex; align-items: center; gap: 6px; }
 @media (max-width: 1100px) { .provider-grid, .voice-layout { grid-template-columns: 1fr; } }
+.speaker-picker { display: flex; gap: 0.5rem; align-items: center; }

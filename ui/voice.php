@@ -4,8 +4,24 @@
 // own size and time limits; the server token is added in PHP, never in this page.
 require __DIR__ . '/common.php';
 require __DIR__ . '/../lib/config_writer.php';
+require __DIR__ . '/../lib/speech.php';
 
-const TTS_PROVIDERS = ['pockettts' => 'PocketTTS (DwemerDistro)', 'openai' => 'OpenAI-compatible /v1/audio/speech (WAV)'];
+const TTS_PROVIDERS = [
+    'auto' => 'Automatic (DwemerDistro PocketTTS)',
+    'xtts' => 'PocketTTS / XTTS API (port 8024, like CHIM)',
+    'pockettts' => 'PocketTTS audio.cpp (older, port 8086 /v1/audio/speech)',
+    'openai' => 'OpenAI-compatible /v1/audio/speech (WAV)',
+];
+const TTS_DEFAULT_URLS = [
+    'auto' => SpeechService::DEFAULT_URL,
+    'xtts' => SpeechService::DEFAULT_URL,
+    'pockettts' => SpeechService::AUDIO_CPP_URL,
+    'openai' => '',
+];
+const TTS_LANGUAGES = ['' => 'Keep what PocketTTS has loaded', 'en' => 'English', 'de' => 'German', 'fr' => 'French',
+    'es' => 'Spanish', 'it' => 'Italian', 'pt' => 'Portuguese', 'pl' => 'Polish', 'tr' => 'Turkish', 'ru' => 'Russian',
+    'nl' => 'Dutch', 'cs' => 'Czech', 'ar' => 'Arabic', 'zh-cn' => 'Chinese', 'ja' => 'Japanese', 'hu' => 'Hungarian',
+    'ko' => 'Korean', 'hi' => 'Hindi'];
 const STT_PROVIDERS = ['parakeet' => 'Parakeet (DwemerDistro)', 'fasterwhisper' => 'faster-whisper (DwemerDistro)'];
 // What speak.php sends to PocketTTS when tts.model / tts.voice are not set.
 const POCKETTTS_DEFAULTS = ['model' => 'pocket-tts', 'voice' => 'alba'];
@@ -27,8 +43,10 @@ if ($stt !== []) {
 }
 $form = [
     'tts_enabled' => !empty($tts['enabled']),
-    'tts_provider' => (string)($tts['provider'] ?? 'pockettts'),
-    'tts_url' => (string)($tts['url'] ?? ''),
+    // No tts section yet: automatic. A saved section without a provider is PocketTTS, like speak.php.
+    'tts_provider' => $tts === [] ? 'auto' : (string)SpeechService::provider($tts),
+    'tts_url' => $tts === [] ? SpeechService::DEFAULT_URL : (string)($tts['url'] ?? ''),
+    'tts_language' => array_key_exists('language', $tts) ? (string)$tts['language'] : 'en',
     'tts_model' => (string)($tts['model'] ?? ''),
     'tts_voice' => (string)($tts['voice'] ?? ''),
     'tts_timeout' => (string)($tts['timeout_seconds'] ?? 30),
@@ -40,7 +58,7 @@ $form = [
     'stt_timeout' => (string)($stt['timeout_seconds'] ?? 60),
 ];
 // New or older configs without a PocketTTS model or voice: show what speak.php would use.
-if ($form['tts_provider'] === 'pockettts') {
+if ($form['tts_provider'] !== 'openai') {
     $form['tts_model'] = $form['tts_model'] !== '' ? $form['tts_model'] : POCKETTTS_DEFAULTS['model'];
     $form['tts_voice'] = $form['tts_voice'] !== '' ? $form['tts_voice'] : POCKETTTS_DEFAULTS['voice'];
 }
@@ -60,9 +78,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $config !== null) {
     } elseif ($action === 'save_tts') {
         $form = array_merge($form, ['tts_enabled' => form_checked('tts_enabled'), 'tts_provider' => post_text('tts_provider'),
             'tts_url' => post_text('tts_url'), 'tts_model' => post_text('tts_model'), 'tts_voice' => post_text('tts_voice'),
-            'tts_timeout' => post_text('tts_timeout')]);
+            'tts_language' => post_text('tts_language'), 'tts_timeout' => post_text('tts_timeout')]);
+        // Switching provider without editing the URL (no JavaScript): use the new default URL.
+        if (isset(TTS_PROVIDERS[$form['tts_provider']]) && ($form['tts_url'] === '' || in_array($form['tts_url'], TTS_DEFAULT_URLS, true))) {
+            $form['tts_url'] = TTS_DEFAULT_URLS[$form['tts_provider']];
+        }
         // PocketTTS needs both; a blank field saves the documented default, never ''.
-        if ($form['tts_provider'] === 'pockettts') {
+        if ($form['tts_provider'] !== 'openai') {
             $form['tts_model'] = $form['tts_model'] !== '' ? $form['tts_model'] : POCKETTTS_DEFAULTS['model'];
             $form['tts_voice'] = $form['tts_voice'] !== '' ? $form['tts_voice'] : POCKETTTS_DEFAULTS['voice'];
         }
@@ -72,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $config !== null) {
             'url' => form_url($form['tts_url']),
             'model' => form_name($form['tts_model'], 200),
             'voice' => form_name($form['tts_voice'], 64),
+            'language' => isset(TTS_LANGUAGES[$form['tts_language']]) ? $form['tts_language'] : null,
             'timeout_seconds' => form_int($form['tts_timeout'], 1, 120),
         ];
         if ($values['provider'] === null) {
@@ -82,6 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $config !== null) {
             [$errorField, $message] = ['tts_model', 'Model must be letters, digits and _ . : / @ + - (required for the openai provider).'];
         } elseif ($values['voice'] === null) {
             [$errorField, $message] = ['tts_voice', 'Voice must be at most 64 characters of letters, digits and _ . : / @ + -'];
+        } elseif ($values['language'] === null) {
+            [$errorField, $message] = ['tts_language', 'Choose a language from the list.'];
         } elseif ($values['timeout_seconds'] === null) {
             [$errorField, $message] = ['tts_timeout', 'Timeout must be 1-120 seconds.'];
         } else {
@@ -170,9 +195,15 @@ require __DIR__ . '/tmpl/header.php';
             <div class="setting-row"><label for="tts_provider">Provider</label><select id="tts_provider" name="tts_provider"<?= voice_field('tts_provider', $errorField) ?>>
                 <?php foreach (TTS_PROVIDERS as $value => $label): ?><option value="<?= e($value) ?>"<?= $form['tts_provider'] === $value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
             </select></div>
-            <div class="setting-row"><label for="tts_url">URL</label><input type="url" id="tts_url" name="tts_url" maxlength="300" value="<?= e($form['tts_url']) ?>" placeholder="http://127.0.0.1:8086/v1/audio/speech"<?= voice_field('tts_url', $errorField) ?>></div>
-            <div class="setting-row"><label for="tts_model">Model <small>(PocketTTS: blank saves pocket-tts; openai: required)</small></label><input type="text" id="tts_model" name="tts_model" maxlength="200" value="<?= e($form['tts_model']) ?>"<?= voice_field('tts_model', $errorField) ?>></div>
-            <div class="setting-row"><label for="tts_voice">Voice <small>(PocketTTS: blank saves alba)</small></label><input type="text" id="tts_voice" name="tts_voice" maxlength="64" value="<?= e($form['tts_voice']) ?>"<?= voice_field('tts_voice', $errorField) ?>></div>
+            <div class="setting-row"><label for="tts_url">URL</label><input type="url" id="tts_url" name="tts_url" maxlength="300" value="<?= e($form['tts_url']) ?>" placeholder="<?= e(TTS_DEFAULT_URLS[$form['tts_provider']] ?? SpeechService::DEFAULT_URL) ?>"<?= voice_field('tts_url', $errorField) ?>></div>
+            <div class="setting-row" id="tts-model-row"<?= in_array($form['tts_provider'], ['auto', 'xtts'], true) ? ' hidden' : '' ?>><label for="tts_model">Model <small>(audio.cpp: blank saves pocket-tts; openai: required)</small></label><input type="text" id="tts_model" name="tts_model" maxlength="200" value="<?= e($form['tts_model']) ?>"<?= voice_field('tts_model', $errorField) ?>></div>
+            <div class="setting-row"><label for="tts_speaker">Speaker <small>(from the TTS service)</small></label><span class="speaker-picker"><select id="tts_speaker" disabled><option value="">Press Find speakers</option></select> <button type="button" id="tts-find">Find speakers</button></span></div>
+            <div class="setting-row"><label for="tts_voice">Voice <small>(a speaker name; blank saves alba)</small></label><input type="text" id="tts_voice" name="tts_voice" maxlength="64" list="tts-speaker-list" value="<?= e($form['tts_voice']) ?>"<?= voice_field('tts_voice', $errorField) ?>><datalist id="tts-speaker-list"></datalist></div>
+            <div class="setting-row" id="tts-language-row"<?= $form['tts_provider'] === 'openai' ? ' hidden' : '' ?>><label for="tts_language">Language</label><select id="tts_language" name="tts_language"<?= voice_field('tts_language', $errorField) ?>>
+                <?php foreach (TTS_LANGUAGES as $value => $label): ?><option value="<?= e($value) ?>"<?= $form['tts_language'] === $value ? ' selected' : '' ?>><?= e($label . ($value !== '' ? " ($value)" : '')) ?></option><?php endforeach; ?>
+            </select></div>
+            <p class="provider-subtext" id="tts-found" role="status">Start PocketTTS in the DwemerDistro launcher, then press Find speakers. A voice the service does not have falls back to its first speaker.</p>
+            <p class="provider-subtext" id="tts-hints" hidden></p>
             <div class="setting-row"><label for="tts_timeout">Timeout (seconds, 1-120)</label><input type="number" id="tts_timeout" name="tts_timeout" min="1" max="120" required value="<?= e($form['tts_timeout']) ?>"<?= voice_field('tts_timeout', $errorField) ?>></div>
             <div class="preview-actions"><button type="submit">Save text to speech</button></div>
         </form>
@@ -182,7 +213,9 @@ require __DIR__ . '/tmpl/header.php';
             <textarea id="tts-text" rows="2" maxlength="1000" required>Hello traveler, this is a voice test.</textarea>
             <label for="tts-npc">NPC ID <small>(optional: uses that NPC's profile voice, if it has one)</small></label>
             <input type="text" id="tts-npc" maxlength="64" pattern="[A-Za-z0-9_.:\-]{1,64}">
-            <div class="preview-actions"><button type="submit" id="tts-send">Speak</button><span id="tts-status" role="status">Uses the saved settings.</span></div>
+            <label for="tts-hint">Voice hint <small>(optional: what the game sends for the NPC's gender)</small></label>
+            <select id="tts-hint"><option value="">none</option><option value="female">female</option><option value="male">male</option><option value="neutral">neutral</option></select>
+            <div class="preview-actions"><button type="submit" id="tts-send">Speak</button><span id="tts-status" role="status">Uses the saved settings (save first).</span></div>
             <audio id="tts-audio" controls hidden></audio>
         </form>
     </section>
@@ -214,6 +247,52 @@ require __DIR__ . '/tmpl/header.php';
 </div>
 <input type="hidden" id="csrf" value="<?= e($csrf) ?>">
 <script>
+// TTS: move an untouched default URL with the provider, and fill the speaker list from the service.
+const ttsDefaultUrls = <?= json_encode(TTS_DEFAULT_URLS, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?>;
+const ttsProvider = document.getElementById('tts_provider');
+ttsProvider.addEventListener('change', () => {
+    const provider = ttsProvider.value;
+    const url = document.getElementById('tts_url');
+    if (url.value === '' || Object.values(ttsDefaultUrls).includes(url.value)) url.value = ttsDefaultUrls[provider] || '';
+    url.placeholder = ttsDefaultUrls[provider] || '';
+    document.getElementById('tts-model-row').hidden = provider === 'auto' || provider === 'xtts';
+    document.getElementById('tts-language-row').hidden = provider === 'openai';
+});
+const speakerSelect = document.getElementById('tts_speaker');
+speakerSelect.addEventListener('change', () => { if (speakerSelect.value) document.getElementById('tts_voice').value = speakerSelect.value; });
+async function findSpeakers() {
+    const found = document.getElementById('tts-found');
+    const hints = document.getElementById('tts-hints');
+    const voice = document.getElementById('tts_voice');
+    if (ttsProvider.value === 'openai') { found.textContent = 'OpenAI-compatible services do not list speakers; type the voice name.'; return; }
+    found.textContent = 'Looking for the TTS service…';
+    const form = new URLSearchParams({provider: ttsProvider.value, url: document.getElementById('tts_url').value, voice: voice.value});
+    let result = null;
+    try {
+        const response = await fetch('voice_speakers.php', {method: 'POST', headers: {'X-CSRF-Token': document.getElementById('csrf').value}, body: form});
+        result = await response.json();
+        if (!response.ok) throw new Error(result?.error?.message || 'HTTP ' + response.status);
+    } catch (error) { found.textContent = 'Could not ask the server: ' + error.message; return; }
+    speakerSelect.replaceChildren();
+    const list = document.getElementById('tts-speaker-list');
+    list.replaceChildren();
+    if (!result.ok) { found.textContent = result.message; speakerSelect.disabled = true; speakerSelect.add(new Option('No speakers', '')); hints.hidden = true; return; }
+    if (result.mode === 'audio_cpp') {
+        found.textContent = 'Found PocketTTS audio.cpp at ' + result.endpoint + '. It does not list speakers; type the voice name.';
+        speakerSelect.disabled = true; speakerSelect.add(new Option('Not listed by audio.cpp', '')); hints.hidden = true; return;
+    }
+    for (const name of result.speakers) { speakerSelect.add(new Option(name, name)); list.append(new Option(name)); }
+    speakerSelect.disabled = result.speakers.length === 0;
+    const current = result.speakers.find(name => name.toLowerCase() === voice.value.toLowerCase());
+    speakerSelect.value = current || result.voice || '';
+    found.textContent = 'Found PocketTTS (XTTS API) at ' + result.endpoint + ' with ' + result.speakers.length + ' speaker(s).'
+        + (current ? '' : ' "' + (voice.value || 'alba') + '" is not one of them, so speech uses ' + result.voice + '. Pick a speaker and save.');
+    const parts = Object.entries(result.hints).map(([hint, names]) => hint + ': ' + (names.length ? names.join(', ') : 'uses the voice above'));
+    hints.textContent = 'Voice hints pick, the same one every time for each NPC, from ' + parts.join('; ') + '.';
+    hints.hidden = parts.length === 0;
+}
+document.getElementById('tts-find').addEventListener('click', findSpeakers);
+if (ttsProvider.value !== 'openai') findSpeakers();
 // Show only the selected STT provider's field and move an untouched default URL along with it.
 const sttDefaultUrls = <?= json_encode(STT_DEFAULT_URLS, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?>;
 document.getElementById('stt_provider').addEventListener('change', event => {
@@ -252,6 +331,8 @@ document.getElementById('tts-test').addEventListener('submit', async event => {
         const body = {protocol: 1, text: document.getElementById('tts-text').value};
         const npc = document.getElementById('tts-npc').value.trim();
         if (npc) body.npc_id = npc;
+        const hint = document.getElementById('tts-hint').value;
+        if (hint) body.voice_hint = hint;
         const result = await voiceRequest('speak', JSON.stringify(body), 'application/json');
         const blob = result.blob;
         if (!(blob instanceof Blob)) throw new Error('No audio was returned.');

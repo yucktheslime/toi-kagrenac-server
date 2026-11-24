@@ -434,8 +434,10 @@ reach the prompt like operator bios.
 
 `speak.php` accepts an optional `voice_hint` (`^[a-z_]{1,16}$`, the game sends `female`,
 `male` or `neutral`). When the NPC has no profile voice, the server picks
-`voice_hints[hint][crc32(npc_id) % n]` from config, so each NPC keeps one voice. The response
-header `X-Voice-Source` is then `hint`.
+`voice_hints[hint][crc32(npc_id) % n]` from config, so each NPC keeps one voice. On the
+XTTS-style API (DwemerDistro PocketTTS on port 8024) the list is first narrowed to the speakers
+the service has (`GET /speakers_list`); when none is there, `female` and `male` use the speakers
+whose names say so and `neutral` all of them. The response header `X-Voice-Source` is then `hint`.
 
 ## Changing the protocol
 

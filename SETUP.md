@@ -31,7 +31,7 @@ removal. The console steps are developer checks, not prerequisites for a game po
 | Windows | DwemerDistro installed and started (it provides WSL, Apache with the shared custom mods port 19000, PostgreSQL, PHP 8.2 at 8.2.35 or later: [patched PHP](#before-you-install-patched-php)). |
 | C++ client/ports only | Visual Studio 2022 with "Desktop development with C++" (MSVC, CMake). Script/managed ports use their qualified engine tools. |
 | Optional | An OpenAI-compatible LLM endpoint (cloud or local). Not needed for the mock. |
-| Optional | For voice, start with DwemerDistro PocketTTS (text-to-speech, audio.cpp, port 8086) and Parakeet (speech-to-text, port 8022); faster-whisper (port 9876) is an alternative. |
+| Optional | For voice, start with DwemerDistro PocketTTS (text-to-speech, port 8024; the older audio.cpp build uses 8086) and Parakeet (speech-to-text, port 8022); faster-whisper (port 9876) is an alternative. |
 
 | Repository | URL |
 |---|---|
@@ -416,15 +416,16 @@ Changes apply on the next request; no restart needed. If the model fails, the ga
 
 Voice is off by default and is never needed for text. To try it:
 
-1. Start with PocketTTS (audio.cpp) for text-to-speech (TTS) and Parakeet for
+1. Start with PocketTTS for text-to-speech (TTS) and Parakeet for
    speech-to-text (STT). They are the recommended DwemerDistro starting choices and are
    often already available in existing setups. In the DwemerDistro launcher, check that
    each one you want is there, install it if it is missing, and start it.
 2. In `config/config.php` (or on the dashboard Voice page) set
    `'tts' => ['enabled' => true, ...]` and/or `'stt' => ['enabled' => true, ...]`. The
-   default URLs are `http://127.0.0.1:8086/v1/audio/speech` and
+   default URLs are `http://127.0.0.1:8024` (PocketTTS, provider `auto`, which also finds
+   the older audio.cpp build on `http://127.0.0.1:8086/v1/audio/speech`) and
    `http://127.0.0.1:8022/v1/audio/transcriptions`; change them if your services run
-   elsewhere. To use faster-whisper instead of Parakeet, see [CONNECTORS.md](CONNECTORS.md).
+   elsewhere. The Voice page lists PocketTTS's speakers to pick from. To use faster-whisper instead of Parakeet, see [CONNECTORS.md](CONNECTORS.md).
    For PocketTTS a blank model or voice saves the defaults `pocket-tts` and `alba`.
 3. Test on the dashboard **Configuration > Voice** page after saving: **Speak** should play
    audio, and for Parakeet choose a short WAV file (at most 10 MB) under **Test
