@@ -5,6 +5,7 @@
 require __DIR__ . '/common.php';
 require __DIR__ . '/../lib/config_writer.php';
 require __DIR__ . '/../lib/speech.php';
+require __DIR__ . '/../lib/stt.php';
 
 const TTS_PROVIDERS = [
     'auto' => 'Automatic (DwemerDistro PocketTTS)',
@@ -22,13 +23,12 @@ const TTS_LANGUAGES = ['' => 'Keep what PocketTTS has loaded', 'en' => 'English'
     'es' => 'Spanish', 'it' => 'Italian', 'pt' => 'Portuguese', 'pl' => 'Polish', 'tr' => 'Turkish', 'ru' => 'Russian',
     'nl' => 'Dutch', 'cs' => 'Czech', 'ar' => 'Arabic', 'zh-cn' => 'Chinese', 'ja' => 'Japanese', 'hu' => 'Hungarian',
     'ko' => 'Korean', 'hi' => 'Hindi'];
-const STT_PROVIDERS = ['parakeet' => 'Parakeet (DwemerDistro)', 'fasterwhisper' => 'faster-whisper (DwemerDistro)'];
+const STT_PROVIDERS = ['auto' => 'Automatic (finds Parakeet, faster-whisper or whisper.cpp here)',
+    'parakeet' => 'Parakeet (DwemerDistro, port 8022)', 'fasterwhisper' => 'faster-whisper (DwemerDistro, port 9876)',
+    'openai' => 'OpenAI-compatible /v1/audio/transcriptions', 'whispercpp' => 'whisper.cpp server (/inference)'];
 // What speak.php sends to PocketTTS when tts.model / tts.voice are not set.
 const POCKETTTS_DEFAULTS = ['model' => 'pocket-tts', 'voice' => 'alba'];
-const STT_DEFAULT_URLS = [
-    'parakeet' => 'http://127.0.0.1:8022/v1/audio/transcriptions',
-    'fasterwhisper' => 'http://127.0.0.1:9876/api/v0/transcribe',
-];
+const STT_DEFAULT_URLS = SttService::DEFAULT_URLS;
 
 $config = ui_config();
 $tts = is_array($config['tts'] ?? null) ? $config['tts'] : [];
@@ -134,16 +134,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $config !== null) {
         ];
         // Each provider has its own extra field; the other one is removed when the provider changes.
         $staleKey = 'model';
-        if ($provider === 'parakeet') {
+        if ($provider === 'fasterwhisper') {
+            $values['form_field'] = preg_match('/^[A-Za-z0-9_]{1,64}$/D', $form['stt_field']) ? $form['stt_field'] : null;
+        } elseif ($provider === 'whispercpp') {
+            $staleKey = '';
+        } else {
             $values['model'] = form_name($form['stt_model'], 200, false);
             $staleKey = 'form_field';
-        } else {
-            $values['form_field'] = preg_match('/^[A-Za-z0-9_]{1,64}$/D', $form['stt_field']) ? $form['stt_field'] : null;
         }
         if ($values['provider'] === null) {
             [$errorField, $message] = ['stt_provider', 'Choose an STT provider from the list.'];
-        } elseif ($values['url'] === null || ($values['enabled'] && $values['url'] === '')) {
-            [$errorField, $message] = ['stt_url', 'STT URL must be an http(s) URL (required when enabled).'];
+        } elseif ($values['url'] === null || ($values['enabled'] && $values['url'] === '' && $provider !== 'auto')) {
+            [$errorField, $message] = ['stt_url', 'STT URL must be an http(s) URL (required when enabled, except for Automatic).'];
         } elseif (array_key_exists('model', $values) && $values['model'] === null) {
             [$errorField, $message] = ['stt_model', 'Model is required: letters, digits and _ . : / @ + - (Parakeet accepts whisper-1).'];
         } elseif (array_key_exists('form_field', $values) && $values['form_field'] === null) {
@@ -155,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $config !== null) {
             $message = save_and_redirect(function (array $latest) use ($values, $staleKey): array {
                 $previous = is_array($latest['stt'] ?? null) ? $latest['stt'] : [];
                 $latest['stt'] = $values + $previous;
-                if (($previous['provider'] ?? 'fasterwhisper') !== $values['provider']) {
+                if (($previous['provider'] ?? 'fasterwhisper') !== $values['provider'] && $staleKey !== '') {
                     unset($latest['stt'][$staleKey]);
                 }
                 return $latest;
@@ -225,12 +227,13 @@ require __DIR__ . '/tmpl/header.php';
             <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="save_stt">
             <div class="setting-row"><span>Status</span><label><input type="checkbox" name="stt_enabled" value="1"<?= $form['stt_enabled'] ? ' checked' : '' ?>> Enabled</label></div>
-            <p class="provider-subtext">Start Parakeet or faster-whisper from the DwemerDistro launcher first, then tick Enabled.</p>
+            <p class="provider-subtext">Start Parakeet (or faster-whisper) from the DwemerDistro launcher first, then tick Enabled. Players use it by holding the push-to-talk key (B) in Minecraft.<?php $sttFound = SttService::probe(); ?>
+                Found on this machine: <?= e(implode(', ', array_map(fn($name, $up) => $name . ($up ? ' (running)' : ' (not running)'), array_keys($sttFound), $sttFound))) ?>.</p>
             <div class="setting-row"><label for="stt_provider">Provider</label><select id="stt_provider" name="stt_provider"<?= voice_field('stt_provider', $errorField) ?>>
                 <?php foreach (STT_PROVIDERS as $value => $label): ?><option value="<?= e($value) ?>"<?= $form['stt_provider'] === $value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
             </select></div>
             <div class="setting-row"><label for="stt_url">URL</label><input type="url" id="stt_url" name="stt_url" maxlength="300" value="<?= e($form['stt_url']) ?>" placeholder="<?= e(STT_DEFAULT_URLS[$form['stt_provider']] ?? STT_DEFAULT_URLS['parakeet']) ?>"<?= voice_field('stt_url', $errorField) ?>></div>
-            <div class="setting-row" id="stt-model-row"<?= $form['stt_provider'] === 'fasterwhisper' ? ' hidden' : '' ?>><label for="stt_model">Model</label><input type="text" id="stt_model" name="stt_model" maxlength="200" value="<?= e($form['stt_model']) ?>"<?= voice_field('stt_model', $errorField) ?>></div>
+            <div class="setting-row" id="stt-model-row"<?= in_array($form['stt_provider'], ['fasterwhisper', 'whispercpp'], true) ? ' hidden' : '' ?>><label for="stt_model">Model</label><input type="text" id="stt_model" name="stt_model" maxlength="200" value="<?= e($form['stt_model']) ?>"<?= voice_field('stt_model', $errorField) ?>></div>
             <div class="setting-row" id="stt-field-row"<?= $form['stt_provider'] === 'fasterwhisper' ? '' : ' hidden' ?>><label for="stt_field">Upload form field</label><input type="text" id="stt_field" name="stt_field" maxlength="64" value="<?= e($form['stt_field']) ?>"<?= voice_field('stt_field', $errorField) ?>></div>
             <div class="setting-row"><label for="stt_timeout">Timeout (seconds, 1-120)</label><input type="number" id="stt_timeout" name="stt_timeout" min="1" max="120" required value="<?= e($form['stt_timeout']) ?>"<?= voice_field('stt_timeout', $errorField) ?>></div>
             <div class="preview-actions"><button type="submit">Save speech to text</button></div>
@@ -240,6 +243,7 @@ require __DIR__ . '/tmpl/header.php';
             <label for="stt-file">WAV file (at most 10 MB)</label>
             <input type="file" id="stt-file" accept=".wav,audio/wav,audio/x-wav" required>
             <div class="preview-actions"><button type="submit" id="stt-send">Transcribe</button><span id="stt-status" role="status">Uses the saved settings.</span></div>
+            <div class="preview-actions"><button type="button" id="stt-record">Record 5 seconds from the microphone</button></div>
             <label for="stt-text">Transcript (edit or type here if recognition fails)</label>
             <textarea id="stt-text" rows="3" maxlength="1000"></textarea>
         </form>
@@ -300,7 +304,7 @@ document.getElementById('stt_provider').addEventListener('change', event => {
     const url = document.getElementById('stt_url');
     if (url.value === '' || Object.values(sttDefaultUrls).includes(url.value)) url.value = sttDefaultUrls[provider] || '';
     url.placeholder = sttDefaultUrls[provider] || '';
-    document.getElementById('stt-model-row').hidden = provider === 'fasterwhisper';
+    document.getElementById('stt-model-row').hidden = provider === 'fasterwhisper' || provider === 'whispercpp';
     document.getElementById('stt-field-row').hidden = provider !== 'fasterwhisper';
 });
 // Both tests send ordinary input and the CSRF token; PHP adds the server token.
@@ -363,6 +367,54 @@ document.getElementById('stt-test').addEventListener('submit', async event => {
         status.textContent = error.message;
         document.getElementById('stt-text').focus();
     } finally { send.disabled = false; }
+});
+// Record from the browser's microphone and send it as 16 kHz mono WAV (what the game sends too).
+function encodeWav(samples, rate) {
+    const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+    const text = (offset, value) => { for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); };
+    text(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); text(8, 'WAVE'); text(12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); text(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 0x7fff, true);
+    return new Blob([view], {type: 'audio/wav'});
+}
+document.getElementById('stt-record').addEventListener('click', async () => {
+    const button = document.getElementById('stt-record');
+    const status = document.getElementById('stt-status');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        status.textContent = 'This browser cannot record here (open the dashboard at http://127.0.0.1 or localhost). Use a WAV file.';
+        return;
+    }
+    button.disabled = true;
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1}});
+        const context = new AudioContext({sampleRate: 16000});
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        const chunks = [];
+        processor.onaudioprocess = event => chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        source.connect(processor);
+        processor.connect(context.destination);
+        status.textContent = 'Recording… speak now (5 seconds).';
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        processor.disconnect(); source.disconnect();
+        const rate = context.sampleRate;
+        await context.close();
+        const samples = new Float32Array(chunks.reduce((n, c) => n + c.length, 0));
+        let offset = 0;
+        for (const c of chunks) { samples.set(c, offset); offset += c.length; }
+        status.textContent = 'Transcribing…';
+        const result = await voiceRequest('listen', encodeWav(samples, rate), 'audio/wav');
+        document.getElementById('stt-text').value = result.text;
+        status.textContent = 'Transcript received (request ' + result.request_id + ').';
+    } catch (error) {
+        status.textContent = error.message || String(error);
+    } finally {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        button.disabled = false;
+    }
 });
 </script>
 <?php endif; ?>

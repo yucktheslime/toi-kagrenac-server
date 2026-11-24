@@ -1,5 +1,5 @@
 <?php
-// API keys for the four secret slots in the private config. Card layout follows
+// API keys for the secret slots in the private config. Card layout follows
 // HerikaServer's ui/core/api_badge.php; keys stay in config/config.php, not the database.
 // A key is never sent back to the browser: fields start blank and only "Saved" or "Not set"
 // is shown. A blank field keeps the current key; the clear box removes it.
@@ -11,6 +11,8 @@ const KEY_SLOTS = [
         'uses' => 'OpenAI-compatible chat (openai and local modes, optional) and OpenRouter chat (required). Never sent in dwemerllm mode.'],
     'tts' => ['title' => 'Text to speech API key', 'path' => 'tts.api_key', 'link' => 'voice.php', 'page' => 'Voice',
         'uses' => 'OpenAI-compatible /v1/audio/speech (openai provider only, optional). PocketTTS needs no key.'],
+    'stt' => ['title' => 'Speech to text API key', 'path' => 'stt.api_key', 'link' => 'voice.php', 'page' => 'Voice',
+        'uses' => 'OpenAI-compatible /v1/audio/transcriptions (openai provider only, optional). Parakeet, faster-whisper and whisper.cpp need no key.'],
     'decision' => ['title' => 'NPC selection API key (OpenRouter JEV)', 'path' => 'decision.api_key', 'link' => 'decision_settings.php', 'page' => 'NPC selection',
         'uses' => 'OpenRouter decisions API used by NPC selection in jev mode. Separate from the LLM key.'],
     'embeddings' => ['title' => 'Embeddings API key', 'path' => 'embeddings.api_key', 'link' => 'memory_settings.php', 'page' => 'Memory settings',
