@@ -1,7 +1,11 @@
-> **A Trade of Immersion:** this folder is the Minecraft mod's Kagrenac server, adapted from the
-> Kagrenac template. Start with [MINECRAFT.md](MINECRAFT.md); players follow
-> [docs/KAGRENAC_SETUP.md](../docs/KAGRENAC_SETUP.md). The rest of this README is the upstream
-> template's.
+> **A Trade of Immersion server.** This repository is the Kagrenac (CHIM-style) AI server of the
+> [A Trade of Immersion](https://github.com/yucktheslime/a-trade-of-immersion) Minecraft mod, adapted from the Kagrenac template. It is published from the
+> `kagrenac-server/` folder of the mod repository; change it there, not here.
+>
+> - **Install:** DwemerDistro launcher, **Mods > Custom mods > Browse mods**, search `Trade of Immersion`,
+>   then **Install server**. Full guide: [KAGRENAC_SETUP.md](https://github.com/yucktheslime/a-trade-of-immersion/blob/main/docs/KAGRENAC_SETUP.md).
+> - **Manual install** (fallback): `scripts/deploy_toi.sh`, see [MINECRAFT.md](MINECRAFT.md).
+> - The rest of this README is the upstream template's.
 
 # KAGRENAC AI Mod Maker
 

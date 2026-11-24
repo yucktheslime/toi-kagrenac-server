@@ -1,9 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "trade-of-immersion",
   "name": "A Trade of Immersion Server",
-  "description": "Kagrenac-based AI NPC server for the A Trade of Immersion Minecraft mod (MCA Reborn companions and villagers): dialogue, allowlisted actions, game events, bios, memory and voice.",
-  "project_url": "https://github.com/yucktheslime/a-trade-of-immersion",
+  "author": "yucktheslime",
+  "description": "CHIM-style AI server for the A Trade of Immersion Minecraft mod (MCA Reborn companions and villagers): dialogue, memory, 13 allowlisted actions, game events, NPC bios and optional voice. Based on the Kagrenac template.",
+  "project_url": "https://github.com/yucktheslime/toi-kagrenac-server",
   "dashboard_path": "ui/",
   "health_path": "health.php",
   "requirements": {
@@ -27,5 +28,63 @@
     "icon": "ui/images/kagrenac.png",
     "banner": "ui/images/kagrenac.png"
   },
-  "server_folder": "TradeOfImmersionServer"
+  "server_folder": "TradeOfImmersionServer",
+  "game": {
+    "id": "minecraft",
+    "name": "Minecraft 1.21.1 (NeoForge, MCA Reborn)",
+    "executable": "options.txt",
+    "version": "Minecraft 1.21.1, NeoForge 21.1.267, MCA Reborn 7.7.36, Architectury API 13.0.8",
+    "loader": "A NeoForge 1.21.1 modpack with MCA Reborn and Architectury API (for example a CurseForge profile). Select the profile's folder (CurseForge: right-click the profile > Open Folder); start it once first so options.txt exists.",
+    "enable_in_game": "Close Minecraft first. Remove any older a-trade-of-immersion jar from the mods folder, then start the modpack and run /npc ai status in game."
+  },
+  "distribution": {
+    "server": {
+      "root": ".",
+      "include": [
+        "*.php",
+        "lib/**",
+        "ui/**",
+        "sql/**",
+        "config/config.example.php",
+        "scripts/*.php",
+        "LICENSE",
+        "LICENSES/**",
+        "THIRD_PARTY_NOTICES.md",
+        "MINECRAFT.md",
+        "PROTOCOL.md"
+      ],
+      "exclude": [
+        "ui/dev/**",
+        "**/*.map",
+        "scripts/publish.py"
+      ]
+    },
+    "client": {
+      "root": ".",
+      "include": [
+        "a-trade-of-immersion-neoforge-*.jar"
+      ],
+      "exclude": [
+        "*-sources.jar",
+        "*-dev-shadow.jar"
+      ],
+      "install": {
+        "profile": "game-directory",
+        "path": "mods",
+        "config_path": "tradeofimmersion-kagrenac.json"
+      }
+    }
+  },
+  "features": [
+    "Talk to your companions and MCA villagers in normal chat; they answer in character",
+    "Companions follow, fight, ride, equip, eat, give, pick up and inspect items on request",
+    "Deaths, fights, gifts and MCA family changes are remembered and reacted to",
+    "Edit NPC bios, read conversations and pick the AI model on the dashboard",
+    "Optional voice (PocketTTS) played from the NPC's position",
+    "Optional: a hosted Minecraft server can use the AI on your PC through a tunnel"
+  ],
+  "testing": {
+    "summary": "Author-tested on a NeoForge 1.21.1 dedicated server and client with MCA Reborn: chat turns, actions, death and fight events, offline queue and recovery, server-streamed voice. Uses a mock LLM in automated checks; real model quality depends on your provider.",
+    "evidence_path": "MINECRAFT.md"
+  }
 }

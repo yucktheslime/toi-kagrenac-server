@@ -2,12 +2,12 @@
 # A Trade of Immersion checks, on top of scripts/smoke.sh, against a mock-mode install whose
 # allowed_actions is the shipped Minecraft list (config/config.example.php).
 # Usage: bash scripts/smoke_minecraft.sh [base_url]
-#   base_url defaults to http://127.0.0.1:19000/custom-mods/TradeOfImmersionServer
+#   base_url defaults to http://127.0.0.1:19000/TradeOfImmersionServer
 set -uo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${EXAMPLE_AI_CONFIG:-$APP_DIR/config/config.php}"
-BASE="${1:-http://127.0.0.1:19000/custom-mods/TradeOfImmersionServer}"
+BASE="${1:-http://127.0.0.1:19000/TradeOfImmersionServer}"
 TOKEN="$(php -r '$c = require $argv[1]; echo $c["token"];' "$CONFIG")"
 RUN="$(date +%s)$RANDOM"
 NPC="c-smoke$RUN"
