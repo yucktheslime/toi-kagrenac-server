@@ -63,10 +63,12 @@ fi
 # 3. Copy the server files. Private files already in the destination are never overwritten.
 echo "== Copying server files to $DEST"
 sudo install -d -o "$(id -un)" -g "$(id -gn)" "$DEST"
+# config/ belongs to the web server after the first install, so only its template is copied, by name.
 tar -C "$SRC" \
-    --exclude='./config/config.php' --exclude='./config/config.php.lock' --exclude='./config/.config-*' \
-    --exclude='./.git' --exclude='./.github' --exclude='*.env' --exclude='./config.json' \
-    -cf - . | tar -C "$DEST" --no-same-owner --no-overwrite-dir -xf -
+    --exclude='./config' --exclude='./.git' --exclude='./.github' --exclude='*.env' --exclude='./config.json' \
+    -cf - . | tar -C "$DEST" --no-same-owner --no-same-permissions --no-overwrite-dir -xf -
+[ -d "$DEST/config" ] || install -d "$DEST/config"
+cp "$SRC/config/config.example.php" "$DEST/config/config.example.php"
 
 # 4. Config (new random token only if missing), database, migrations.
 echo "== Running install.sh"

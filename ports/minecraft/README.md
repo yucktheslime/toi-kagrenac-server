@@ -27,7 +27,7 @@ PocketTTS build. Audio was captured with OpenAL Soft's wave-file output, not hea
 
 | Check | Result (rows in `ex_events`) |
 |---|---|
-| `/npc ai status` | `ready, server 0.3.0-toi, schema 008_game_bios, Minecraft actions (13 offered); token set; voice on` |
+| `/npc ai status` | `ready, server 0.3.1-toi, schema 008_game_bios, Minecraft actions (13 offered); token set; voice on` |
 | `follow_player`, `hold_position` | handled (`following Dev`, `staying here`) |
 | `mount` / `dismount` (boat) | handled, plus the logged action_result `mounted Oak Boat` |
 | `go_to: home` | failed `can't see 'home'` (no home set), reported to result.php, and the NPC reacted to it |
