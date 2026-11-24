@@ -24,5 +24,8 @@ sudo -u postgres pg_dump --format=custom "$DB_NAME" > "$DEST/$DB_NAME.dump"
 if [ -f "$APP_DIR/config/config.php" ]; then
     cp "$APP_DIR/config/config.php" "$DEST/config.php"
 fi
+if [ -d "$APP_DIR/config/plugins" ] && [ ! -L "$APP_DIR/config/plugins" ]; then
+    tar -C "$APP_DIR/config" --exclude='./plugins/.tmp-*' --exclude='./plugins/.download-*' -cf "$DEST/plugins.tar" plugins
+fi
 chown -R "$APP_OWNER" "$DEST"
 echo "Backup written to $DEST"

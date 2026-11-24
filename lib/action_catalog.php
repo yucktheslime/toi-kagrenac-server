@@ -62,22 +62,68 @@ final class ActionCatalog
             'target' => self::TARGET_REQUEST_NPC, 'arg' => self::ARG_REQUIRED, 'arg_hint' => 'the villager name'],
     ];
 
-    // Every known name, in catalog order.
-    public static function names(): array
+    // Actions registered by enabled plugins for this request. They never replace a built-in name.
+    private static array $extra = [];
+
+    public static function builtInNames(): array
     {
         return array_keys(self::KNOWN);
+    }
+
+    // $spec: when, arg (none|optional|required), optional arg_hint. Returns false if the name is
+    // built-in, invalid, or the spec is unusable.
+    public static function register(string $name, array $spec): bool
+    {
+        if (isset(self::KNOWN[$name]) || isset(self::$extra[$name]) || !preg_match('/^[A-Za-z0-9_]{1,40}$/D', $name)) {
+            return false;
+        }
+        $arg = $spec['arg'] ?? self::ARG_NONE;
+        if (!in_array($arg, [self::ARG_NONE, self::ARG_OPTIONAL, self::ARG_REQUIRED], true)) {
+            return false;
+        }
+        $when = trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)($spec['when'] ?? '')) ?? '');
+        if ($when === '' || mb_strlen($when) > 200) {
+            return false;
+        }
+        $hint = trim(preg_replace('/[\x00-\x1F\x7F]+/u', ' ', (string)($spec['arg_hint'] ?? 'a short name')) ?? '');
+        if ($hint === '') {
+            $hint = 'a short name';
+        }
+        self::$extra[$name] = [
+            'when' => $when,
+            'target' => self::TARGET_REQUEST_NPC,
+            'arg' => $arg,
+            'arg_hint' => mb_substr($hint, 0, 80),
+        ];
+        return true;
+    }
+
+    public static function resetExtras(): void
+    {
+        self::$extra = [];
+    }
+
+    private static function known(): array
+    {
+        return self::KNOWN + self::$extra;
+    }
+
+    // Every known name, in catalog order (built-ins first, then registered plugin actions).
+    public static function names(): array
+    {
+        return array_keys(self::known());
     }
 
     // The known names whose target is the request's npc.id, in catalog order.
     public static function requestNpcTargetNames(): array
     {
-        return array_keys(array_filter(self::KNOWN, fn(array $action) => $action['target'] === self::TARGET_REQUEST_NPC));
+        return array_keys(array_filter(self::known(), fn(array $action) => $action['target'] === self::TARGET_REQUEST_NPC));
     }
 
     // none, optional or required. Unknown (custom) names take no argument.
     public static function argRule(string $name): string
     {
-        return self::KNOWN[$name]['arg'] ?? self::ARG_NONE;
+        return self::known()[$name]['arg'] ?? self::ARG_NONE;
     }
 
     // The prompt sentences for the known actions among $tags ("[ACTION:name]" strings that the
@@ -85,7 +131,7 @@ final class ActionCatalog
     public static function promptHints(array $tags): string
     {
         $hints = '';
-        foreach (self::KNOWN as $name => $action) {
+        foreach (self::known() as $name => $action) {
             if (in_array("[ACTION:$name]", $tags, true)) {
                 $form = match ($action['arg']) {
                     self::ARG_REQUIRED => "[ACTION:$name: {$action['arg_hint']}]",
@@ -118,7 +164,7 @@ final class ActionCatalog
     {
         $action = ['name' => $name];
         $args = [];
-        if ((self::KNOWN[$name]['target'] ?? null) === self::TARGET_REQUEST_NPC && $targetId !== null) {
+        if ((self::known()[$name]['target'] ?? null) === self::TARGET_REQUEST_NPC && $targetId !== null) {
             $args['target_id'] = $targetId;
         }
         if ($value !== null && self::argRule($name) !== self::ARG_NONE) {

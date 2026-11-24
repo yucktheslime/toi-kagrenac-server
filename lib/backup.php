@@ -18,7 +18,7 @@ const BACKUP_MAX_OUTPUT = 4096;         // bytes of tool output kept for the err
 const BACKUP_BINARIES = ['/usr/bin/', '/usr/local/bin/'];
 const BACKUP_SYSTEM_DATABASES = ['postgres', 'template0', 'template1'];
 const BACKUP_TABLES = ['ex_turns', 'ex_generations', 'ex_requests', 'ex_npc_bios', 'ex_knowledge', 'ex_checkpoints', 'ex_events',
-    'ex_profiles', 'ex_npc_profiles', 'ex_memory_notes', 'ex_memory_candidates', 'ex_connector_calls'];
+    'ex_profiles', 'ex_npc_profiles', 'ex_memory_notes', 'ex_memory_candidates', 'ex_connector_calls', 'ex_plugins'];
 
 final class BackupError extends RuntimeException
 {

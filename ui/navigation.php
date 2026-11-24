@@ -27,6 +27,7 @@ return [
         'World & Behavior' => [
             'npc_bios' => ['NPC bios', 'npc_bios.php'],
             'profiles' => ['Profiles', 'profiles.php'],
+            'plugins' => ['Plugins', 'plugins.php'],
         ],
     ]],
     'control' => ['label' => 'Control Panel', 'href' => 'logs.php', 'groups' => [

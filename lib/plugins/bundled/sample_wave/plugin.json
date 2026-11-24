@@ -1,0 +1,7 @@
+{
+  "id": "sample_wave",
+  "name": "Sample wave action",
+  "version": "1.0.0",
+  "description": "Offers a custom [ACTION:wave] tag so the NPC can wave or greet. The game treats it as a simple gesture. Also records game events in the PHP error log (no player text) as an example event hook.",
+  "hooks": ["action", "game_event"]
+}

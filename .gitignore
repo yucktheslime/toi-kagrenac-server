@@ -8,3 +8,6 @@ config/.config-*.php
 /.env
 /build/
 /out/
+# User-installed plugins. They live next to config.php so Core updates keep them
+# (unknown files + private config) and so Apache already denies the folder.
+/config/plugins/

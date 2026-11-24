@@ -18,8 +18,9 @@ require_once __DIR__ . '/minime.php';
 require_once __DIR__ . '/memory_vectors.php';
 require_once __DIR__ . '/memory.php';
 require_once __DIR__ . '/audit.php';
+require_once __DIR__ . '/plugins.php';
 
-const MAX_OFFERED_ACTIONS = 16;
+const MAX_OFFERED_ACTIONS = 24;
 
 // The optional "context" object: at most 10 entries, keys a-z and _ (max 32), text values (max 200).
 function require_context(mixed $context): array
@@ -65,15 +66,17 @@ function run_turn(array $config, float $started, string $requestId, string $sess
 {
     trace_id($requestId);
     $historyLimit = max(0, min(50, (int)($config['history_limit'] ?? 10)));
-    $allowedActions = $config['allowed_actions'] ?? ActionCatalog::DEFAULT_ALLOWED;
-    // The game's offered_actions can only narrow the allowlist: the prompt offers, and
-    // extract_actions() returns, names in both.
-    if (isset($turn['offered_actions'])) {
-        $allowedActions = array_values(array_intersect(is_array($allowedActions) ? $allowedActions : [], $turn['offered_actions']));
-    }
     $memorySettings = memory_settings($config);
     $db = db_connect($config);
     require_schema($db);
+    plugins_bootstrap($db);
+    $allowedActions = $config['allowed_actions'] ?? ActionCatalog::DEFAULT_ALLOWED;
+    $allowedActions = plugins_extend_allowed(is_array($allowedActions) ? $allowedActions : []);
+    // The game's offered_actions can only narrow the allowlist: the prompt offers, and
+    // extract_actions() returns, names in both.
+    if (isset($turn['offered_actions'])) {
+        $allowedActions = array_values(array_intersect($allowedActions, $turn['offered_actions']));
+    }
     $dialogue = new DialogueHistory($db);
 
     // Every outcome after validation is logged (lib/events.php), outside any transaction.
@@ -215,6 +218,10 @@ function run_turn(array $config, float $started, string $requestId, string $sess
     if ($minimeResult['action'] !== null) {
         $knowledge['action_hint'] = $minimeResult['action'];
     }
+    $pluginContext = plugins_prompt_context(['npc_id' => $npcId, 'player_text' => $turn['text'], 'context' => $turn['context']]);
+    if ($pluginContext !== '') {
+        $knowledge['plugin_context'] = $pluginContext;
+    }
     $facts = [];
     foreach ($knowledge['facts'] as $i => $fact) {
         $facts[] = ($trace['facts'][$i] ?? []) + $fact;
@@ -231,6 +238,7 @@ function run_turn(array $config, float $started, string $requestId, string $sess
             'diary_entries' => count($knowledge['memory']['diary'])] : null,
         'minime' => $minime === null ? null : ['recall' => $minimeResult['recall'],
             'action' => $minimeResult['action'], 'error' => $minimeResult['error']],
+        'plugins' => array_keys(array_filter(plugins_state()['plugins'], fn($plugin) => !empty($plugin['enabled']))),
     ];
 
     // 7. Ask the model. This can be slow, so it happens outside any transaction.

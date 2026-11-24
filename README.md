@@ -74,6 +74,10 @@ loading through the game's mod loader) is built and verified for the game you ch
 
 The model can request allowlisted actions. Both server and client validate them; the game
 must provide a real handler and observe its outcome. A returned action is not proof it ran.
+Optional server plugins (dashboard: Configuration → Plugins) can add prompt context, extra
+allowlisted actions and `game_event` handlers. User-installed plugins live in
+`config/plugins/` so they survive updates and are not served over HTTP. See
+[docs/PLUGINS.md](docs/PLUGINS.md).
 JEV's shipped `decision.php` contract selects an answering NPC from the candidates offered
 by the game. Other decision systems need a planned, validated game-specific contract.
 

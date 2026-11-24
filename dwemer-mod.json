@@ -51,7 +51,8 @@
         "LICENSES/**",
         "THIRD_PARTY_NOTICES.md",
         "MINECRAFT.md",
-        "PROTOCOL.md"
+        "PROTOCOL.md",
+        "docs/PLUGINS.md"
       ],
       "exclude": [
         "ui/dev/**",
@@ -81,7 +82,8 @@
     "Deaths, fights, gifts and MCA family changes are remembered and reacted to",
     "Edit NPC bios, read conversations and pick the AI model on the dashboard",
     "Optional voice (PocketTTS) played from the NPC's position",
-    "Optional: a hosted Minecraft server can use the AI on your PC through a tunnel"
+    "Optional: a hosted Minecraft server can use the AI on your PC through a tunnel",
+    "Optional server plugins: add prompt facts, extra actions and event hooks from the dashboard"
   ],
   "testing": {
     "summary": "Author-tested on a NeoForge 1.21.1 dedicated server and client with MCA Reborn: chat turns, actions, death and fight events, offline queue and recovery, server-streamed voice. Uses a mock LLM in automated checks; real model quality depends on your provider.",

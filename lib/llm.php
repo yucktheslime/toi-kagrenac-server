@@ -93,6 +93,10 @@ function mock_reply(array $llm, array $turn, array $knowledge, ?array $profile =
     if (!empty($knowledge['recent_events']) && str_contains($text, 'what happened')) {
         return 'Recently: ' . implode(' ', array_column($knowledge['recent_events'], 'text'));
     }
+    // Shows that a plugin prompt hook reached the reply (smoke tests ask about "mod items").
+    if (!empty($knowledge['plugin_context']) && str_contains($text, 'mod item')) {
+        return 'Plugin notes: ' . $knowledge['plugin_context'];
+    }
     if (str_contains($text, 'dance')) {
         // "dance" is not on the allowlist, so it shows up in rejected_actions.
         return 'Watch this! [ACTION:dance]';
@@ -124,7 +128,8 @@ function knowledge_prompt(array $knowledge): string
 {
     unset($knowledge['action_hint']);
     if ($knowledge['bio'] === null && !$knowledge['facts'] && empty($knowledge['memory']['summary'])
-        && empty($knowledge['memory']['diary']) && empty($knowledge['recent_events'])) {
+        && empty($knowledge['memory']['diary']) && empty($knowledge['recent_events'])
+        && empty($knowledge['plugin_context'])) {
         return 'Reference data: none';
     }
     // JSON_HEX_TAG escapes < and >, so stored text cannot close the <data> block.

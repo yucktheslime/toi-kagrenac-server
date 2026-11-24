@@ -31,6 +31,8 @@ turn() { # <request_id> <text>
 }
 
 expect "health lists minecraft_actions" 200 '"minecraft_actions"' "$(curl -sS -m 10 -w '\n%{http_code}' "$BASE/health.php")"
+expect "health lists plugins" 200 '"plugins"' "$(curl -sS -m 10 -w '\n%{http_code}' "$BASE/health.php")"
+expect "health lists plugin_actions" 200 '"plugin_actions"' "$(curl -sS -m 10 -w '\n%{http_code}' "$BASE/health.php")"
 expect "13 offered actions accepted" 200 '"name":"follow_player"' "$(post turn.php "$(turn "m-$RUN-1" 'follow me')")"
 expect "equip with argument" 200 "{\"name\":\"equip\",\"args\":{\"target_id\":\"$NPC\",\"value\":\"iron sword\"}}" \
     "$(post turn.php "$(turn "m-$RUN-2" 'equip your iron sword')")"
@@ -52,6 +54,14 @@ if [[ "$parse" == '[["Ok",[],["equip"]],["Ok",[],["equip"]],["Ok",[{"name":"go_t
     echo "PASS argument parser"
 else
     echo "FAIL argument parser: $parse"; failures=$((failures + 1))
+fi
+
+# Hook tests (manifest, mock LLM, zip install) do not need the running server.
+if php "$APP_DIR/tests/plugins_test.php"; then
+    echo "PASS plugin unit tests"
+else
+    echo "FAIL plugin unit tests"
+    failures=$((failures + 1))
 fi
 
 if [ "$failures" -gt 0 ]; then

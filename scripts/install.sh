@@ -50,6 +50,20 @@ fi
 # folder inherit that group. Only the folder, config and lock are changed, never their content.
 chown "$WEB_USER:$APP_GROUP" "$CONFIG_DIR"
 chmod 2770 "$CONFIG_DIR"
+PLUGINS_DIR="$CONFIG_DIR/plugins"
+if [ -L "$PLUGINS_DIR" ]; then
+    echo "ERROR: $PLUGINS_DIR is a symbolic link. Refusing to change it." >&2
+    exit 1
+fi
+if [ ! -e "$PLUGINS_DIR" ]; then
+    install -d -o "$WEB_USER" -g "$APP_GROUP" -m 2770 "$PLUGINS_DIR"
+elif [ ! -d "$PLUGINS_DIR" ]; then
+    echo "ERROR: $PLUGINS_DIR exists and is not a folder." >&2
+    exit 1
+else
+    chown "$WEB_USER:$APP_GROUP" "$PLUGINS_DIR"
+    chmod 2770 "$PLUGINS_DIR"
+fi
 if [ -f "$CONFIG" ]; then
     echo "Keeping existing config: $CONFIG"
 else

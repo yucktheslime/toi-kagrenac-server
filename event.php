@@ -41,6 +41,11 @@ if ($respond) {
         'context' => $context,
         'offered_actions' => require_offered_actions($input),
     ];
+    $hookDb = db_connect($config);
+    require_schema($hookDb);
+    plugins_bootstrap($hookDb);
+    plugins_dispatch_game_event(['type' => $type, 'text' => $text, 'context' => $context,
+        'npc_id' => $npcId, 'session_id' => $sessionId]);
     run_turn($config, $started, $requestId, $sessionId, $npcId, $turn, $type);
 }
 
@@ -71,6 +76,9 @@ if ($eventId === null) {
 db_query($db, 'COMMIT');
 event_prune($db, $config);
 forget_old_request_ids($db);
+plugins_bootstrap($db);
+plugins_dispatch_game_event(['type' => $type, 'text' => $text, 'context' => $context,
+    'npc_id' => $npcId, 'session_id' => $sessionId]);
 
 // "logged" means the server stored the event. It is not a sign that anything ran in the game.
 // Optional TXT2VEC (or other embeddings) indexing runs after the game has the reply.

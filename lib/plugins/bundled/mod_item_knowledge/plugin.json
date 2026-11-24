@@ -1,0 +1,16 @@
+{
+  "id": "mod_item_knowledge",
+  "name": "Mod item knowledge",
+  "version": "1.0.0",
+  "description": "Adds a configurable list of modded items and facts to every NPC prompt, so companions can talk about packs like Create or Farmer's Delight.",
+  "hooks": ["prompt"],
+  "settings": {
+    "facts": {
+      "type": "textarea",
+      "label": "Items and facts",
+      "description": "One fact per line. These are quoted to the model as reference data, not as instructions. Leave blank to use the built-in examples.",
+      "max": 4000,
+      "default": "Create: Andesite Alloy is a common crafting material made from iron and andesite.\nFarmer's Delight: cooking pots and cutting boards turn crops into meals such as stew and dumplings.\nSupplementaries: faucets can pour liquid from a cauldron, and a rope bale can be climbed.\nWaystones: a waystone lets a player teleport between other waystones they have unlocked."
+    }
+  }
+}
