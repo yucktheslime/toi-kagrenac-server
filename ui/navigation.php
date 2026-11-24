@@ -20,6 +20,7 @@ return [
         'AI & Voice' => [
             'llm' => ['LLM', 'llm.php'],
             'voice' => ['Voice', 'voice.php'],
+            'npc_voices' => ['NPC voices', 'npc_voices.php'],
             'decision' => ['NPC selection', 'decision_settings.php'],
             'memory_settings' => ['Memory settings', 'memory_settings.php'],
             'minime' => ['Minime & TXT2VEC', 'minime.php'],

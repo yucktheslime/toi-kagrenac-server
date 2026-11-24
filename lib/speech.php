@@ -22,6 +22,7 @@
 
 require_once __DIR__ . '/app.php';
 require_once __DIR__ . '/profiles.php';
+require_once __DIR__ . '/npc_voices.php';
 
 final class SpeechService
 {
@@ -36,8 +37,29 @@ final class SpeechService
     private const CACHE_SECONDS = 60;
     private const VOICE_PATTERN = '/^[A-Za-z0-9_.:-]{1,64}$/D';
 
+    // A Trade of Immersion: the NPC this line is for, so a first line can store an automatic voice.
+    private ?\PgSql\Connection $npcDb = null;
+    private string $npcId = '';
+    private string $npcGender = '';
+    private ?float $pitch = null;
+
     private function __construct(private array $tts, private string $voiceSource, private array $hint = [])
     {
+    }
+
+    private function withNpc(?\PgSql\Connection $db, ?string $npcId, string $gender, ?array $row): self
+    {
+        $this->npcDb = $db;
+        $this->npcId = (string)$npcId;
+        $this->npcGender = $gender;
+        $this->pitch = is_array($row) && $row['pitch'] !== null ? (float)$row['pitch'] : null;
+        return $this;
+    }
+
+    // The NPC's pitch (0.5-2.0) from its voice profile, or null. The game applies it when playing.
+    public function pitch(): ?float
+    {
+        return $this->pitch;
     }
 
     // The configured provider. Configs from before tts.provider existed are PocketTTS.
@@ -54,18 +76,34 @@ final class SpeechService
     // A Trade of Immersion: without a profile voice, an optional $voiceHint (for example 'male' or
     // 'female') picks a stable voice for this NPC, so each NPC keeps sounding the same. On the
     // XTTS-style API the pick is made among the service's real speakers (see hintCandidates).
-    public static function forNpc(array $config, array $tts, ?string $npcId, ?string $voiceHint = null): self
+    public static function forNpc(array $config, array $tts, ?string $npcId, ?string $voiceHint = null, string $npcName = ''): self
     {
         // The configured voice, kept for the speaker-list fallback when a profile or hint voice is missing.
         $tts['_config_voice'] = (string)($tts['voice'] ?? '');
+        $gender = in_array($voiceHint, ['female', 'male', 'neutral'], true) ? $voiceHint : '';
+        $db = null;
+        $row = null;
         if ($npcId !== null) {
             $db = db_connect_quiet($config);
-            $profile = $db !== null && schema_problem($db) === null ? profile_for_npc($db, $npcId) : false;
+            if ($db !== null && schema_problem($db) !== null) {
+                $db = null;
+            }
+            // A Trade of Immersion: the NPC's own voice profile (ex_npc_voices). A dashboard or
+            // /npc voice choice wins over a character profile; an automatic pick comes after it.
+            $row = $db !== null ? npc_voice_touch($db, $npcId, $npcName, $gender) : null;
+            if (is_array($row) && $row['voice'] !== null && $row['source'] !== 'auto') {
+                return (new self(npc_voice_tts($tts, $row), 'npc'))->withNpc($db, $npcId, $gender, $row);
+            }
+            $profile = $db !== null ? profile_for_npc($db, $npcId) : false;
             if ($profile === false) {
                 app_log('profile voice lookup skipped; using the configured voice');
             } elseif (($profile['tts_voice'] ?? null) !== null) {
-                return new self(profile_tts($tts, $profile), 'profile');
+                return (new self(npc_voice_tts(profile_tts($tts, $profile), $row, false), 'profile'))->withNpc(null, $npcId, $gender, $row);
             }
+            if (is_array($row) && $row['voice'] !== null) {
+                return (new self(npc_voice_tts($tts, $row), 'auto'))->withNpc($db, $npcId, $gender, $row);
+            }
+            $tts = npc_voice_tts($tts, $row, false);
         }
         if ($voiceHint !== null) {
             $listed = self::hintList($config, $voiceHint);
@@ -74,12 +112,12 @@ final class SpeechService
                 $hint = ['name' => $voiceHint, 'listed' => $listed, 'npc' => $npcId ?? ''];
                 if ($listed !== []) {
                     $tts['voice'] = $listed[crc32($npcId ?? '') % count($listed)];
-                    return new self($tts, 'hint', $hint);
+                    return (new self($tts, 'hint', $hint))->withNpc($db, $npcId, $gender, $row);
                 }
-                return new self($tts, 'config', $hint);
+                return (new self($tts, 'config', $hint))->withNpc($db, $npcId, $gender, $row);
             }
         }
-        return new self($tts, 'config');
+        return (new self($tts, 'config'))->withNpc($db, $npcId, $gender, $row);
     }
 
     // 'profile', 'hint' or 'config': where the voice came from.
@@ -190,7 +228,17 @@ final class SpeechService
     {
         $tts = $this->tts;
         $speakers = self::speakers($base) ?? [];
-        if ($this->hint !== [] && $this->voiceSource !== 'profile') {
+        // A Trade of Immersion: an NPC without a voice gets its own the first time it speaks: a
+        // speaker no other NPC uses yet (by gender when the names say so), stored as source 'auto'.
+        if ($this->npcDb !== null && $this->npcId !== '' && $speakers !== [] && in_array($this->voiceSource, ['hint', 'config'], true)) {
+            $pool = $this->hint !== [] ? self::hintCandidates($this->hint['listed'], $this->hint['name'], $speakers, $tts) : [];
+            $picked = npc_voice_auto_assign($this->npcDb, $this->npcId, $pool !== [] ? $pool : $speakers);
+            if ($picked !== null) {
+                $this->voiceSource = 'auto';
+                return $picked;
+            }
+        }
+        if ($this->hint !== [] && !in_array($this->voiceSource, ['profile', 'npc', 'auto'], true)) {
             $candidates = self::hintCandidates($this->hint['listed'], $this->hint['name'], $speakers, $tts);
             if ($candidates !== []) {
                 $this->voiceSource = 'hint';
@@ -417,6 +465,29 @@ final class SpeechService
             return 'audio_cpp';
         }
         return '';
+    }
+
+    // A Trade of Immersion: the XTTS-style service (PocketTTS) base URL for the configured tts, or
+    // null when none answers or the provider is not XTTS-style. Used to upload voice samples.
+    public static function xttsBase(array $tts): ?string
+    {
+        $provider = self::provider($tts);
+        $url = (string)($tts['url'] ?? '') !== '' ? (string)$tts['url'] : self::DEFAULT_URL;
+        if ($provider === 'openai') {
+            return null;
+        }
+        if ($provider === 'xtts' || ($provider === 'pockettts' && !self::isAudioCppUrl($url))) {
+            return self::baseUrl($url);
+        }
+        $service = self::findService($url);
+        return $service !== null && $service['mode'] === 'xtts' ? $service['base'] : null;
+    }
+
+    // The speakers PocketTTS lists (fresh after an upload), or null when it does not answer.
+    public static function speakerList(array $tts, bool $fresh = false): ?array
+    {
+        $base = self::xttsBase($tts);
+        return $base === null ? null : self::speakers($base, $fresh);
     }
 
     public static function baseUrl(string $url): string

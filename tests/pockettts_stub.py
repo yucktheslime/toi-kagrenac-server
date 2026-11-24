@@ -96,6 +96,31 @@ class Handler(BaseHTTPRequestHandler):
             form = {k: v[0] for k, v in parse_qs(raw.decode()).items()}
             self.record({"path": path, "body": form})
             return self.send(200, wav(), "audio/wav")
+        if args.mode == "xtts" and path == "/upload_sample":
+            # Like bridge_api.py: any multipart file part is the sample; speaker_name may rename it.
+            ctype = self.headers.get("Content-Type") or ""
+            if "multipart/form-data" not in ctype or "boundary=" not in ctype:
+                return self.send(400, {"error": "No file detected"})
+            boundary = ctype.split("boundary=", 1)[1].strip().strip('"').encode()
+            name, data = None, None
+            for part in raw.split(b"--" + boundary):
+                head, _, body = part.partition(b"\r\n\r\n")
+                body = body.rstrip(b"\r\n").rstrip(b"-").rstrip(b"\r\n")
+                disp = head.decode(errors="replace")
+                if 'filename="' in disp:
+                    data = body
+                    name = name or disp.split('filename="', 1)[1].split('"', 1)[0].replace(".wav", "")
+                elif 'name="speaker_name"' in disp:
+                    name = body.decode().replace(".wav", "")
+            if data is None:
+                return self.send(400, {"error": "No file detected"})
+            if not data.startswith(b"RIFF"):
+                return self.send(400, {"error": "not a wav"})
+            replaced = name in SPEAKERS
+            if not replaced:
+                SPEAKERS.append(name)
+            self.record({"path": path, "speaker": name, "bytes": len(data)})
+            return self.send(200, {"status": "success", "speaker": name, "replaced": replaced})
         if args.mode == "xtts" and path == "/set_tts_settings":
             return self.send(200, {"status": "success"})
         return self.send(404, {"detail": "Not Found"})

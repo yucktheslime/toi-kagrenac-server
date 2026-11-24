@@ -527,11 +527,13 @@ function plugins_zip_error(string $message): string
 }
 
 // Reads the central directory of a zip and returns member records, or an error string.
-function plugins_zip_list(string $path): array|string
+// The limits default to the plugin ones; the voice sample importer (lib/npc_voices.php) passes larger ones.
+function plugins_zip_list(string $path, int $maxZip = PLUGIN_MAX_ZIP_BYTES, int $maxUnpacked = PLUGIN_MAX_UNPACKED_BYTES,
+    int $maxFiles = PLUGIN_MAX_FILES): array|string
 {
     $size = @filesize($path);
-    if (!is_int($size) || $size < 22 || $size > PLUGIN_MAX_ZIP_BYTES) {
-        return plugins_zip_error('The zip is missing, empty or larger than 2 MB.');
+    if (!is_int($size) || $size < 22 || $size > $maxZip) {
+        return plugins_zip_error('The zip is missing, empty or larger than ' . round($maxZip / 1000000) . ' MB.');
     }
     $fh = @fopen($path, 'rb');
     if ($fh === false) {
@@ -571,7 +573,7 @@ function plugins_zip_list(string $path): array|string
         fclose($fh);
         return plugins_zip_error('The file is not a zip archive.');
     }
-    if ($eocd['total'] > PLUGIN_MAX_FILES || $eocd['cdOffset'] < 0 || $eocd['cdSize'] < 1) {
+    if ($eocd['total'] > $maxFiles || $eocd['cdOffset'] < 0 || $eocd['cdSize'] < 1) {
         fclose($fh);
         return plugins_zip_error('The zip has too many files or a damaged directory.');
     }
@@ -623,8 +625,8 @@ function plugins_zip_list(string $path): array|string
             return plugins_zip_error('The zip uses a compression method that is not accepted.');
         }
         $unpacked += $head['raw'];
-        if ($unpacked > PLUGIN_MAX_UNPACKED_BYTES || $head['comp'] > PLUGIN_MAX_UNPACKED_BYTES) {
-            return plugins_zip_error('The zip unpacks to more than 8 MB.');
+        if ($unpacked > $maxUnpacked || $head['comp'] > $maxUnpacked) {
+            return plugins_zip_error('The zip unpacks to more than ' . round($maxUnpacked / 1000000) . ' MB.');
         }
         $members[] = $head + ['name' => $name];
     }
@@ -712,7 +714,7 @@ function plugins_zip_extract_member(string $path, array $member): string|false
     if ($member['method'] === 0) {
         $data = $compressed;
     } else {
-        $data = @gzinflate($compressed);
+        $data = @gzinflate($compressed, max(1, $member['raw']));
         if (!is_string($data)) {
             return false;
         }

@@ -390,6 +390,7 @@ template actions when `health.php` lacks these capabilities.
 | `action_args` | An action may carry one short argument, see below. |
 | `minecraft_events` | Extra `event.php` types, see below. |
 | `bio_sync` | `POST npc_bio.php`. |
+| `npc_voices` | Per-NPC voice profiles: `POST npc_voice.php`; `speak.php` accepts `npc_name` and may answer `X-Voice-Pitch`. |
 | `recent_events` | `turn.php` adds the session's recent log-only game events (`recent_events_limit`, default 6, max 12, last 30 minutes, this NPC or no NPC) to the prompt. |
 
 ### Action arguments
@@ -414,6 +415,22 @@ Besides `location_entered`, `item_given`, `combat_started` and `combat_ended`:
 `world_note`. The same rules apply (text 1-300 characters, `respond` true or false). The game
 logs most of them with `respond: false`; `entity_died`, `villager_spoke` and `action_result`
 can also be sent with `respond: true` for an in-character reaction.
+
+### POST npc_voice.php
+
+Per-NPC voice profiles (table `ex_npc_voices`), for the game's `/npc voice` command and companion menu.
+Bearer token like every game endpoint. Body `{"protocol":1,"action":...}`:
+
+- `list`: `{"ok":true,"speakers":[...],"tts_found":true,"npcs":[{"id","name","kind","voice","source","language","pitch"}]}`
+- `get` with `npc` (an id such as `c-<uuid>`/`v-<uuid>`, or a name): `{"ok":true,"npc":{...}}`
+- `set` with `npc`, `voice` (a PocketTTS speaker, `""` = automatic), optional `language`, `pitch`
+  (0.5-2.0) and `npc_name`. Fields left out keep their value. Stored with `source: "game"`.
+
+Errors: 404 `not_found` (unknown NPC name), 409 `ambiguous` with `matches`, 400 `unknown_voice` with
+`speakers`. `speak.php` uses the NPC's voice: dashboard or game choice, then a character profile's voice,
+then an automatic pick, which is a speaker no other NPC uses yet and is stored as `source: "auto"`. Its reply
+header `X-Voice-Source` is `npc`, `profile`, `auto`, `hint` or `config`. `X-Voice-Pitch` is set when the
+NPC has a pitch.
 
 ### POST npc_bio.php
 

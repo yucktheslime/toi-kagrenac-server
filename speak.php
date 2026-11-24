@@ -18,6 +18,8 @@ $requestId = trace_start($input['request_id'] ?? null);
 $parentId = isset($input['parent_request_id']) ? require_id($input['parent_request_id'], 'parent_request_id', 8) : null;
 $npcId = isset($input['npc_id']) ? require_id($input['npc_id'], 'npc_id') : null;
 $text = require_text($input['text'] ?? null, 'text', 1000);
+// A Trade of Immersion addition: optional npc_name (max 64), shown on the dashboard's NPC voices page.
+$npcName = isset($input['npc_name']) && $input['npc_name'] !== '' ? require_text($input['npc_name'], 'npc_name', 64) : '';
 // A Trade of Immersion addition: optional voice_hint (a-z and _, max 16), see lib/speech.php.
 $voiceHint = null;
 if (isset($input['voice_hint'])) {
@@ -43,11 +45,12 @@ if (empty($tts['enabled'])) {
 }
 
 // The NPC's profile may choose its voice. Any problem keeps the configured voice.
-$speech = SpeechService::forNpc($config, $tts, $npcId, $voiceHint);
+$speech = SpeechService::forNpc($config, $tts, $npcId, $voiceHint, $npcName);
 [$wav, $detail] = $speech->synthesize($text);
 if ($wav === null) {
     $failed($detail);
 }
 
 reply_then(200, 'audio/wav', $wav, fn() => audit_record($config, ['status' => 'ok', 'duration_ms' => event_duration_ms($started),
-    'detail' => $detail] + $audit), ['X-Voice-Source: ' . $speech->voiceSource()]);
+    'detail' => $detail] + $audit), array_merge(['X-Voice-Source: ' . $speech->voiceSource()],
+    $speech->pitch() !== null ? ['X-Voice-Pitch: ' . number_format($speech->pitch(), 2, '.', '')] : []));

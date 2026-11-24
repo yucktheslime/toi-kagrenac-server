@@ -64,6 +64,18 @@ else
     chown "$WEB_USER:$APP_GROUP" "$PLUGINS_DIR"
     chmod 2770 "$PLUGINS_DIR"
 fi
+# Voice samples uploaded on the NPC voices page (A Trade of Immersion), next to the private config.
+VOICES_DIR="$CONFIG_DIR/voices"
+if [ -L "$VOICES_DIR" ]; then
+    echo "ERROR: $VOICES_DIR is a symbolic link. Refusing to change it." >&2
+    exit 1
+fi
+if [ ! -e "$VOICES_DIR" ]; then
+    install -d -o "$WEB_USER" -g "$APP_GROUP" -m 2770 "$VOICES_DIR"
+elif [ -d "$VOICES_DIR" ]; then
+    chown "$WEB_USER:$APP_GROUP" "$VOICES_DIR"
+    chmod 2770 "$VOICES_DIR"
+fi
 if [ -f "$CONFIG" ]; then
     echo "Keeping existing config: $CONFIG"
 else
