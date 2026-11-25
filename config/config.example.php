@@ -54,7 +54,8 @@ return [
     // has a handler in the A Trade of Immersion mod (ports/minecraft/README.md); remove a name to
     // forbid that action. All act on the request's npc.id.
     'allowed_actions' => ['follow_player', 'hold_position', 'attack_hostile', 'attack_target', 'go_to', 'mount',
-        'dismount', 'equip', 'use_item', 'give_item', 'pick_up', 'inspect_item', 'talk_to_villager'],
+        'dismount', 'equip', 'use_item', 'give_item', 'pick_up', 'inspect_item', 'talk_to_villager',
+        'farm', 'chop', 'mine', 'dig', 'fetch', 'travel', 'learn_item', 'use_ability', 'stop_job'],
 
     // OPTIONAL VOICE. Off by default. The game always gets text first. Start the matching
     // DwemerDistro service from the launcher, then set 'enabled' => true (or use the Voice page).
